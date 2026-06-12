@@ -1,0 +1,91 @@
+/* Criativos de publicidade — tamanhos exatos para redes sociais */
+.ad {
+  position: relative; overflow: hidden; color: #fff; font-family: 'Inter', sans-serif;
+  --accent: #00E5FF;
+  background:
+    radial-gradient(60% 50% at 80% 12%, rgba(0,229,255,.16), transparent 60%),
+    radial-gradient(70% 60% at 15% 95%, rgba(0,229,255,.08), transparent 60%),
+    linear-gradient(160deg, #0a0e16, #05070d 70%);
+}
+.ad .stars { position: absolute; inset: 0; opacity: .5; background-image: radial-gradient(rgba(255,255,255,.5) 1px, transparent 1px); background-size: 46px 46px; }
+.ad .glow { position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(0,229,255,.22), transparent 65%); filter: blur(10px); }
+.ad .brand { display: flex; align-items: center; gap: 14px; font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: .04em; position: relative; z-index: 2; }
+.ad .brand img { filter: none; }
+.ad .dishbg { display: none; }
+.ad .eyebrow { font-family: 'JetBrains Mono', monospace; color: var(--accent); text-transform: uppercase; letter-spacing: .22em; position: relative; z-index: 2; }
+.ad h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; line-height: 1.02; letter-spacing: -.01em; position: relative; z-index: 2; }
+.ad .price { position: relative; z-index: 2; }
+.ad .price .from { color: #9fb0c4; }
+.ad .price .v { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #fff; }
+.ad .price .v b { color: var(--accent); }
+.ad .cta { display: inline-flex; align-items: center; gap: 14px; background: #25D366; color: #04210f; font-weight: 700; border-radius: 999px; position: relative; z-index: 2; }
+.ad .cta svg { flex: none; }
+.ad .slogan { font-family: 'Space Grotesk', sans-serif; color: #cfe9ff; position: relative; z-index: 2; }
+.ad .web { font-family: 'JetBrains Mono', monospace; color: #8aa0b8; position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 10px; }
+.ad .dish { position: absolute; object-fit: contain; filter: drop-shadow(0 20px 50px rgba(0,0,0,.6)); z-index: 1; }
+
+/* ---------- TEMA CLARO ---------- */
+.ad.light {
+  color: #0a0c10;
+  background:
+    radial-gradient(60% 50% at 82% 10%, rgba(0,0,0,.05), transparent 60%),
+    linear-gradient(160deg, #ffffff, #eef1f4 75%);
+}
+.ad.light .stars { display: none; }
+.ad.light .glow { background: radial-gradient(circle, rgba(0,0,0,.06), transparent 65%); }
+.ad.light .brand { color: #0a0c10; }
+.ad.light .brand img { filter: none; }
+.ad.light .eyebrow { color: #0a0c10; }
+.ad.light .price .from { color: #6b7280; }
+.ad.light .price .v { color: #0a0c10; }
+.ad.light .price .v b { color: #0a0c10; }
+.ad.light .slogan { color: #1d1d1f; }
+.ad.light .web { color: #6b7280; }
+.ad.light .dish { filter: drop-shadow(0 16px 40px rgba(0,0,0,.18)); }
+.ad.light .dishbg { display: block; position: absolute; border-radius: 50%; background: radial-gradient(circle, rgba(0,0,0,.06), transparent 70%); z-index: 0; }
+.ad-sq.light .dishbg { width: 640px; height: 640px; right: -80px; top: 260px; }
+.ad-ls.light .dishbg { width: 580px; height: 580px; right: -80px; bottom: -100px; }
+.ad-st.light .dishbg { width: 860px; height: 860px; left: 50%; transform: translateX(-50%); top: 700px; }
+
+/* ===== QUADRADO 1080 ===== */
+.ad-sq { width: 1080px; height: 1080px; padding: 84px; }
+.ad-sq .glow { width: 620px; height: 620px; right: -120px; top: -120px; }
+.ad-sq .brand { font-size: 42px; } .ad-sq .brand img { width: 60px; height: 60px; }
+.ad-sq .eyebrow { font-size: 22px; margin-top: 70px; }
+.ad-sq h2 { font-size: 92px; margin-top: 18px; max-width: 760px; }
+.ad-sq .dish { width: 560px; right: -40px; top: 300px; }
+.ad-sq .price { position: absolute; left: 84px; bottom: 250px; }
+.ad-sq .price .from { font-size: 26px; } .ad-sq .price .v { font-size: 92px; margin-top: 4px; }
+.ad-sq .cta { position: absolute; left: 84px; bottom: 132px; font-size: 30px; padding: 22px 40px; }
+.ad-sq .cta svg { width: 34px; height: 34px; }
+.ad-sq .slogan { position: absolute; right: 84px; bottom: 150px; font-size: 30px; text-align: right; }
+.ad-sq .web { position: absolute; right: 84px; bottom: 96px; font-size: 24px; }
+.ad-sq .web svg { width: 24px; height: 24px; }
+
+/* ===== STORY / STATUS 1080x1920 ===== */
+.ad-st { width: 1080px; height: 1920px; padding: 96px; }
+.ad-st .glow { width: 700px; height: 700px; left: 50%; transform: translateX(-50%); top: -200px; }
+.ad-st .brand { font-size: 48px; justify-content: center; } .ad-st .brand img { width: 68px; height: 68px; }
+.ad-st .eyebrow { display: block; text-align: center; font-size: 26px; margin-top: 120px; }
+.ad-st h2 { font-size: 112px; text-align: center; margin-top: 24px; }
+.ad-st .dish { width: 760px; left: 50%; transform: translateX(-50%); top: 780px; }
+.ad-st .price { position: absolute; left: 0; right: 0; text-align: center; bottom: 560px; }
+.ad-st .price .from { font-size: 34px; } .ad-st .price .v { font-size: 150px; display: block; margin-top: 8px; }
+.ad-st .cta { position: absolute; left: 50%; transform: translateX(-50%); bottom: 360px; font-size: 40px; padding: 30px 56px; }
+.ad-st .cta svg { width: 44px; height: 44px; }
+.ad-st .slogan { position: absolute; left: 0; right: 0; text-align: center; bottom: 240px; font-size: 42px; }
+.ad-st .web { position: absolute; left: 0; right: 0; justify-content: center; text-align: center; bottom: 160px; font-size: 30px; }
+.ad-st .web svg { width: 30px; height: 30px; }
+
+/* ===== HORIZONTAL 1200x628 ===== */
+.ad-ls { width: 1200px; height: 628px; padding: 64px; }
+.ad-ls .glow { width: 520px; height: 520px; right: -140px; top: -160px; }
+.ad-ls .brand { font-size: 34px; } .ad-ls .brand img { width: 48px; height: 48px; }
+.ad-ls h2 { font-size: 70px; margin-top: 30px; max-width: 640px; }
+.ad-ls .dish { width: 520px; right: -30px; bottom: -40px; }
+.ad-ls .price { position: absolute; left: 64px; bottom: 124px; }
+.ad-ls .price .from { font-size: 20px; } .ad-ls .price .v { font-size: 64px; margin-top: 2px; }
+.ad-ls .cta { position: absolute; left: 64px; bottom: 44px; font-size: 22px; padding: 14px 28px; }
+.ad-ls .cta svg { width: 26px; height: 26px; }
+.ad-ls .web { position: absolute; right: 64px; bottom: 50px; font-size: 20px; }
+.ad-ls .web svg { width: 20px; height: 20px; }
