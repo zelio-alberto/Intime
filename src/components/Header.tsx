@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef, type MouseEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, Sun, Moon } from "lucide-react";
 import { clsx } from "clsx";
 import { getTheme, toggleTheme, type Theme } from "../theme";
@@ -9,6 +9,23 @@ export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setThemeState] = useState<Theme>("dark");
   const location = useLocation();
+  const navigate = useNavigate();
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Logótipo: 1 clique → início · 2 cliques → portal de gestão (atalho discreto)
+  const onLogoClick = (e: MouseEvent) => {
+    e.preventDefault();
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+      navigate("/admin");
+    } else {
+      clickTimer.current = setTimeout(() => {
+        clickTimer.current = null;
+        navigate("/");
+      }, 260);
+    }
+  };
 
   useEffect(() => {
     setThemeState(getTheme());
@@ -31,10 +48,10 @@ export default function Header() {
         )}
       >
         <div className="max-w-[1400px] mx-auto px-6 lg:px-12 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3 font-display font-bold text-2xl text-fg tracking-tight">
-            <img src="/logo-intime.png" alt="Intime" className="logo-img w-9 h-9" />
+          <a href="/" onClick={onLogoClick} title="Intime" className="flex items-center gap-3 font-display font-bold text-2xl text-fg tracking-tight cursor-pointer select-none">
+            <img src="/logo-intime.png" alt="Intime" className="logo-img w-9 h-9" draggable={false} />
             <span>INTIME</span>
-          </Link>
+          </a>
 
           <nav className="hidden lg:flex items-center gap-10">
             <Link to="/" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/" ? "text-accent" : "text-muted hover:text-fg")}>Início</Link>
