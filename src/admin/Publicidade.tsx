@@ -27,6 +27,17 @@ export default function Publicidade() {
   });
   const set = (k: keyof AdData, v: string) => setData((d) => ({ ...d, [k]: v }));
 
+  const [opts, setOpts] = useState({ waButton: true, showNumber: true, showWeb: true });
+  const toggle = (k: keyof typeof opts) => setOpts((o) => ({ ...o, [k]: !o[k] }));
+  const [copied, setCopied] = useState("");
+  const copy = (text: string, id: string) => { navigator.clipboard.writeText(text); setCopied(id); setTimeout(() => setCopied(""), 1800); };
+
+  // Links clicáveis para colar na legenda / estado / bio
+  let waDigits = data.whatsapp.replace(/\D/g, "");
+  if (waDigits && !waDigits.startsWith("258") && waDigits.length <= 9) waDigits = "258" + waDigits;
+  const waLink = `https://wa.me/${waDigits}?text=${encodeURIComponent("Olá Intime! Quero saber mais sobre a internet Starlink.")}`;
+  const siteLink = /^https?:\/\//.test(data.website) ? data.website : "https://" + data.website;
+
   const sq = useRef<HTMLDivElement>(null);
   const st = useRef<HTMLDivElement>(null);
   const ls = useRef<HTMLDivElement>(null);
@@ -71,6 +82,37 @@ export default function Publicidade() {
           <div><label className={label}>WhatsApp</label><input className={input + " w-[180px]"} value={data.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} /></div>
           <div><label className={label}>Website (link)</label><input className={input + " w-[230px]"} value={data.website} onChange={(e) => set("website", e.target.value)} /></div>
         </div>
+
+        {/* O que mostrar na imagem */}
+        <div className="flex flex-wrap items-center gap-5 mt-5 pt-5 border-t border-line">
+          <span className={label + " mb-0"}>Mostrar na imagem:</span>
+          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer"><input type="checkbox" checked={opts.waButton} onChange={() => toggle("waButton")} /> Botão WhatsApp</label>
+          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer"><input type="checkbox" checked={opts.showNumber} onChange={() => toggle("showNumber")} disabled={!opts.waButton} /> Número de telefone</label>
+          <label className="flex items-center gap-2 text-sm text-muted cursor-pointer"><input type="checkbox" checked={opts.showWeb} onChange={() => toggle("showWeb")} /> Link do site</label>
+          <button onClick={() => setOpts({ waButton: true, showNumber: false, showWeb: false })} className="text-xs font-mono uppercase tracking-widest border border-line px-3 py-1.5 hover:bg-fg hover:text-bg transition-colors">Versão limpa</button>
+        </div>
+      </div>
+
+      {/* Links clicáveis para a legenda/estado */}
+      <div className="border border-line bg-card p-5 md:p-6 mb-8">
+        <h2 className="font-display text-lg mb-1">Links para a legenda / estado</h2>
+        <p className="text-muted text-sm mb-4">A imagem fica limpa; cole estes links no texto da publicação/estado/bio — ao clicar, leva o cliente direto.</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <span className={label}>Link WhatsApp (clicável)</span>
+            <div className="flex gap-2">
+              <input readOnly className={input + " text-[12px]"} value={waLink} onFocus={(e) => e.target.select()} />
+              <button onClick={() => copy(waLink, "wa")} className="bg-fg text-bg px-4 font-mono text-[11px] uppercase tracking-widest font-bold hover:bg-accent transition-colors whitespace-nowrap">{copied === "wa" ? "Copiado ✓" : "Copiar"}</button>
+            </div>
+          </div>
+          <div>
+            <span className={label}>Link do site</span>
+            <div className="flex gap-2">
+              <input readOnly className={input + " text-[12px]"} value={siteLink} onFocus={(e) => e.target.select()} />
+              <button onClick={() => copy(siteLink, "web")} className="bg-fg text-bg px-4 font-mono text-[11px] uppercase tracking-widest font-bold hover:bg-accent transition-colors whitespace-nowrap">{copied === "web" ? "Copiado ✓" : "Copiar"}</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Criativos */}
@@ -85,7 +127,7 @@ export default function Publicidade() {
               </button>
             </div>
             <Frame w={c.w} h={c.h} scale={c.scale}>
-              <AdCreative ref={c.ref} format={c.format} theme={theme} data={data} />
+              <AdCreative ref={c.ref} format={c.format} theme={theme} data={data} opts={opts} />
             </Frame>
           </div>
         ))}
