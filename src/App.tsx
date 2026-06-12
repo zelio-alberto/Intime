@@ -17,7 +17,6 @@ import Contactos from './admin/Contactos';
 import Frases from './admin/Frases';
 import Contrato from './admin/Contrato';
 import Membros from './admin/Membros';
-import Publicidade from './admin/Publicidade';
 
 export default function App() {
   return (
@@ -38,7 +37,6 @@ export default function App() {
             <Route index element={<Pedidos />} />
             <Route path="mensagens" element={<Mensagens />} />
           </Route>
-          <Route path="publicidade" element={<Publicidade />} />
           <Route path="config" element={<ConfigLayout />}>
             <Route index element={<Pacotes />} />
             <Route path="contactos" element={<Contactos />} />
