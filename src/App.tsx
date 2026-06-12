@@ -14,6 +14,7 @@ import Pedidos from './admin/Pedidos';
 import Mensagens from './admin/Mensagens';
 import Pacotes from './admin/Pacotes';
 import Contactos from './admin/Contactos';
+import Frases from './admin/Frases';
 import Contrato from './admin/Contrato';
 import Membros from './admin/Membros';
 
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="config" element={<ConfigLayout />}>
             <Route index element={<Pacotes />} />
             <Route path="contactos" element={<Contactos />} />
+            <Route path="frases" element={<Frases />} />
             <Route path="contrato" element={<Contrato />} />
             <Route path="membros" element={<Membros />} />
           </Route>

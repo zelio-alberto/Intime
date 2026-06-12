@@ -25,7 +25,25 @@ export type SiteConfig = {
   hero: { priceLabel: string; price: string; unit: string };
   plans: Plan[];
   contract: string;
+  taglines: string[];
 };
+
+export const DEFAULT_TAGLINES = [
+  "A sua casa ligada ao mundo.",
+  "Conectamos o que importa.",
+  "Mais perto do mundo, todos os dias.",
+  "O mundo à distância de uma ligação.",
+  "Internet para viver sem limites.",
+  "Onde a sua vida acontece, a Intime conecta.",
+  "Conecte-se ao que realmente importa.",
+  "O futuro começa com uma boa conexão.",
+  "Internet para quem quer ir mais longe.",
+  "Leve a sua casa mais longe.",
+  "Porque estar ligado faz toda a diferença.",
+  "Mais velocidade para a vida moderna.",
+  "A conexão que move a sua vida.",
+  "A sua porta de entrada para o mundo.",
+];
 
 export const DEFAULT_CONTRACT = `TERMO DE COMPROMISSO E CONDIÇÕES DE SERVIÇO — INTIME
 (Rascunho — sujeito a revisão jurídica. As condições vinculativas constam do contrato final assinado.)
@@ -144,6 +162,7 @@ export const DEFAULT_CONFIG: SiteConfig = {
     },
   ],
   contract: DEFAULT_CONTRACT,
+  taglines: DEFAULT_TAGLINES,
 };
 
 export const CONFIG_REF = () => doc(db, "siteConfig", "starlink");
@@ -162,6 +181,7 @@ export function useSiteConfig(): SiteConfig {
             hero: { ...DEFAULT_CONFIG.hero, ...(data.hero || {}) },
             plans: data.plans && data.plans.length ? data.plans : DEFAULT_CONFIG.plans,
             contract: data.contract || DEFAULT_CONFIG.contract,
+            taglines: data.taglines && data.taglines.length ? data.taglines : DEFAULT_CONFIG.taglines,
           });
         }
       },

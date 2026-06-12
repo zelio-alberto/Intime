@@ -5,6 +5,7 @@ import Layout from "../components/Layout";
 import { ChevronRight, ArrowUpRight, Zap, Target, Globe, Satellite } from "lucide-react";
 import { useSiteConfig } from "../useSiteConfig";
 import PlansSlider from "../components/PlansSlider";
+import RotatingText from "../components/RotatingText";
 
 export default function Home() {
   const { scrollYProgress } = useScroll();
@@ -27,7 +28,7 @@ export default function Home() {
            <div className="max-w-5xl">
              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-4 mb-8">
                <div className="h-px w-8 bg-accent"></div>
-               <span className="font-mono text-accent tracking-[0.2em] text-xs uppercase">Terminal de Acesso / Moçambique</span>
+               <span className="font-mono text-accent tracking-[0.2em] text-xs uppercase">Internet Starlink · Moçambique</span>
              </motion.div>
              
              <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-[clamp(2.75rem,7vw,6.5rem)] font-display font-medium text-fg mb-6 leading-[0.95] tracking-tighter uppercase">
@@ -35,9 +36,14 @@ export default function Home() {
                <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-300 to-gray-600">há conexão.</span>
              </motion.h1>
 
-             <motion.p initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-lg md:text-2xl text-muted font-light max-w-2xl mb-12 border-l border-line pl-6">
-               Escolha a sua internet <strong className="text-fg font-medium">Starlink</strong> — a Intime faz acontecer. Instalação e suporte local, para a sua casa ou negócio.
-             </motion.p>
+             <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="max-w-2xl mb-12 border-l border-line pl-6">
+               <div className="text-2xl md:text-4xl text-fg font-light leading-tight min-h-[3rem] md:min-h-[3.5rem]">
+                 <RotatingText items={cfg.taglines} />
+               </div>
+               <p className="text-base md:text-lg text-muted font-light mt-4">
+                 Escolha a sua internet <strong className="text-fg font-medium">Starlink</strong> — a Intime faz acontecer. Para a sua casa ou negócio.
+               </p>
+             </motion.div>
 
              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex flex-wrap items-center gap-8 md:gap-14">
                <Link to="/aderir" className="group relative px-10 py-5 bg-fg text-bg font-mono text-xs tracking-[0.2em] uppercase overflow-hidden flex items-center gap-3">
