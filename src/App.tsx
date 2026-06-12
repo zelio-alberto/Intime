@@ -8,6 +8,8 @@ import Aderir from './pages/Aderir';
 import Login from './admin/Login';
 import AdminLayout from './admin/AdminLayout';
 import Painel from './admin/Painel';
+import InboxLayout from './admin/InboxLayout';
+import ConfigLayout from './admin/ConfigLayout';
 import Pedidos from './admin/Pedidos';
 import Mensagens from './admin/Mensagens';
 import Pacotes from './admin/Pacotes';
@@ -30,12 +32,16 @@ export default function App() {
         <Route path="/admin/login" element={<Login />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Painel />} />
-          <Route path="pedidos" element={<Pedidos />} />
-          <Route path="mensagens" element={<Mensagens />} />
-          <Route path="planos" element={<Pacotes />} />
-          <Route path="contactos" element={<Contactos />} />
-          <Route path="contrato" element={<Contrato />} />
-          <Route path="membros" element={<Membros />} />
+          <Route path="solicitacoes" element={<InboxLayout />}>
+            <Route index element={<Pedidos />} />
+            <Route path="mensagens" element={<Mensagens />} />
+          </Route>
+          <Route path="config" element={<ConfigLayout />}>
+            <Route index element={<Pacotes />} />
+            <Route path="contactos" element={<Contactos />} />
+            <Route path="contrato" element={<Contrato />} />
+            <Route path="membros" element={<Membros />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

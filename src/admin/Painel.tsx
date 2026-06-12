@@ -25,10 +25,10 @@ export default function Painel() {
   const recent = [...reqs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 5);
 
   const stats = [
-    { label: "Pedidos novos", value: novos, to: "/admin/pedidos", icon: Inbox, accent: true },
-    { label: "Total de pedidos", value: reqs.length, to: "/admin/pedidos", icon: Inbox },
-    { label: "Mensagens", value: msgs.length, to: "/admin/mensagens", icon: Mail },
-    { label: "Pacotes ativos", value: cfg.plans.length, to: "/admin/planos", icon: Boxes },
+    { label: "Pedidos novos", value: novos, to: "/admin/solicitacoes", icon: Inbox, accent: true },
+    { label: "Total de pedidos", value: reqs.length, to: "/admin/solicitacoes", icon: Inbox },
+    { label: "Mensagens", value: msgs.length, to: "/admin/solicitacoes/mensagens", icon: Mail },
+    { label: "Pacotes ativos", value: cfg.plans.length, to: "/admin/config", icon: Boxes },
   ];
 
   return (
@@ -52,7 +52,7 @@ export default function Painel() {
       <div className="border border-line bg-card">
         <div className="flex items-center justify-between px-6 py-4 border-b border-line">
           <h2 className="font-display text-xl">Pedidos recentes</h2>
-          <Link to="/admin/pedidos" className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline">Ver todos</Link>
+          <Link to="/admin/solicitacoes" className="font-mono text-[11px] uppercase tracking-widest text-accent hover:underline">Ver todos</Link>
         </div>
         {recent.length === 0 ? (
           <p className="text-faint text-sm px-6 py-10 text-center">Ainda não há pedidos.</p>

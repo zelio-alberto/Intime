@@ -4,16 +4,12 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAdminAuth } from "./useAdminAuth";
 import { ConfigProvider, useConfig } from "./ConfigContext";
-import { LayoutDashboard, Inbox, Mail, Boxes, Phone, FileText, Users, LogOut, Loader2, ExternalLink } from "lucide-react";
+import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink } from "lucide-react";
 
 const NAV = [
   { to: "/admin", end: true, label: "Painel", icon: LayoutDashboard },
-  { to: "/admin/pedidos", label: "Pedidos", icon: Inbox },
-  { to: "/admin/mensagens", label: "Mensagens", icon: Mail },
-  { to: "/admin/planos", label: "Pacotes", icon: Boxes },
-  { to: "/admin/contactos", label: "Contactos", icon: Phone },
-  { to: "/admin/contrato", label: "Contrato", icon: FileText },
-  { to: "/admin/membros", label: "Membros", icon: Users },
+  { to: "/admin/solicitacoes", label: "Solicitações", icon: Inbox },
+  { to: "/admin/config", label: "Configurações", icon: Settings },
 ];
 
 function tabClass({ isActive }: { isActive: boolean }) {
@@ -39,19 +35,17 @@ export default function AdminLayout() {
       <FlashBanner />
       <div className="min-h-screen bg-bg text-fg">
         <header className="sticky top-0 z-50 bg-bg/90 backdrop-blur-xl border-b border-line">
-          <div className="max-w-[1100px] mx-auto px-6">
-            {/* Linha superior */}
+          <div className="px-6 md:px-10">
             <div className="flex items-center justify-between h-16 gap-4">
               <Link to="/" className="flex items-center gap-3 font-display font-bold text-xl">
                 <img src="/logo-intime.png" alt="Intime" className="logo-img w-8 h-8" /> Gestão
               </Link>
               <div className="flex items-center gap-5">
                 <a href="/" target="_blank" rel="noopener" className="hidden sm:flex items-center gap-2 text-xs text-muted hover:text-fg transition-colors"><ExternalLink size={14} /> Ver o site</a>
-                <span className="hidden md:block text-xs text-faint truncate max-w-[200px]">{user?.email}</span>
+                <span className="hidden md:block text-xs text-faint truncate max-w-[220px]">{user?.email}</span>
                 <button onClick={() => signOut(auth)} className="flex items-center gap-2 text-xs text-muted hover:text-accent transition-colors"><LogOut size={16} /> <span className="hidden sm:inline">Sair</span></button>
               </div>
             </div>
-            {/* Navegação por separadores */}
             <nav className="flex gap-1 overflow-x-auto -mb-px">
               {NAV.map((it) => (
                 <NavLink key={it.to} to={it.to} end={it.end} className={tabClass}>
@@ -62,7 +56,7 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        <main className="max-w-[1100px] mx-auto px-6 py-8 md:py-10">
+        <main className="px-6 md:px-10 py-8 md:py-10">
           <Outlet />
         </main>
       </div>
