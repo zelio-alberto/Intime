@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-playfair: "Playfair Display", Georgia, serif;
+  --font-bricolage: "Bricolage Grotesque", sans-serif;
+  --font-hanken: "Hanken Grotesk", sans-serif;
+
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-body: "Inter", sans-serif;
+
+  /* Semantic colors — driven by CSS variables that flip with the theme */
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+
+  /* Legacy aliases (kept so any leftover class still resolves) */
+  --color-intime-dark: var(--bg);
+  --color-intime-card: var(--card);
+  --color-intime-accent: var(--accent);
+}
+
+/* ---- Theme palettes ---- */
+:root, html.dark {
+  --bg: #030406;
+  --card: #0A0C10;
+  --fg: #F3F4F6;
+  --muted: #9aa3af;
+  --faint: #6b7280;
+  --line: rgba(255, 255, 255, 0.10);
+  --accent: #00E5FF;
+}
+
+html.light {
+  --bg: #FFFFFF;
+  --card: #FAFAFA;
+  --fg: #0A0C10;
+  --muted: #555555;
+  --faint: #888888;
+  --line: rgba(0, 0, 0, 0.10);
+  --accent: #1d1d1f;
+}
+
+/* Locally force the dark palette (for cinematic hero / video sections) */
+.force-dark {
+  --bg: #030406;
+  --card: #0A0C10;
+  --fg: #F3F4F6;
+  --muted: #9aa3af;
+  --faint: #6b7280;
+  --line: rgba(255, 255, 255, 0.10);
+  --accent: #00E5FF;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  overflow-y: scroll;
+  transition: background-color .4s ease, color .4s ease;
+}
+
+.noise-bg {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+html.light .noise-bg { opacity: 0.02; }
+
+/* Logo: dark artwork by default (light theme); invert to near-white in dark theme */
+.logo-img { display: block; object-fit: contain; }
+html.dark .logo-img { filter: invert(1) brightness(1.9); }
+
+.glass-panel {
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+}
+
+::selection {
+  background-color: var(--accent);
+  color: var(--bg);
+}
