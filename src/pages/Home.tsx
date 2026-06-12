@@ -30,13 +30,13 @@ export default function Home() {
                <span className="font-mono text-accent tracking-[0.2em] text-xs uppercase">Terminal de Acesso / Moçambique</span>
              </motion.div>
              
-             <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-[clamp(3.5rem,9vw,9rem)] font-display font-medium text-fg mb-6 leading-[0.9] tracking-tighter uppercase">
-               Conexão <br/>
-               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-400 to-gray-700">Absoluta.</span>
+             <motion.h1 initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-[clamp(2.75rem,7vw,6.5rem)] font-display font-medium text-fg mb-6 leading-[0.95] tracking-tighter uppercase">
+               Onde há Intime, <br/>
+               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-300 to-gray-600">há conexão.</span>
              </motion.h1>
 
              <motion.p initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="text-lg md:text-2xl text-muted font-light max-w-2xl mb-12 border-l border-line pl-6">
-               Internet Starlink instalada e gerida pela Intime. Sem cabos, sem torres, sem complicações — internet de alta velocidade direto para a sua casa.
+               Internet <strong className="text-fg font-medium">Starlink</strong> instalada e gerida pela Intime — para a sua casa ou negócio. Equipamento, instalação e suporte local incluídos. Você só liga e usa.
              </motion.p>
 
              <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="flex flex-wrap items-center gap-8 md:gap-14">
