@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Analytics from './Analytics';
 import Home from './pages/Home';
 import ComoFunciona from './pages/ComoFunciona';
 import Sobre from './pages/Sobre';
@@ -21,6 +22,7 @@ import Membros from './admin/Membros';
 export default function App() {
   return (
     <BrowserRouter>
+      <Analytics />
       <Routes>
         {/* Site público */}
         <Route path="/" element={<Home />} />
