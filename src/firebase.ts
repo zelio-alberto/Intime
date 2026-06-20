@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { getAnalytics, isSupported, type Analytics } from "firebase/analytics";
 
 // Reutiliza o mesmo projeto Firebase do INTIME ASSIST (zuma-1fec6),
@@ -22,6 +23,8 @@ export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export const db = getFirestore(app);
+
+export const storage = getStorage(app);
 
 // Google Analytics (GA4). Só inicializa no browser (isSupported evita erros
 // em ambientes sem window, ex.: build/SSR). Disponível em `analytics`.

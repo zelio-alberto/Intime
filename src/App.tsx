@@ -5,6 +5,7 @@ import ComoFunciona from './pages/ComoFunciona';
 import Sobre from './pages/Sobre';
 import Contacto from './pages/Contacto';
 import Aderir from './pages/Aderir';
+import Conta from './pages/Conta';
 
 import Login from './admin/Login';
 import AdminLayout from './admin/AdminLayout';
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/sobre" element={<Sobre />} />
         <Route path="/contacto" element={<Contacto />} />
         <Route path="/aderir" element={<Aderir />} />
+        <Route path="/conta" element={<Conta />} />
 
         {/* Gestão */}
         <Route path="/admin/login" element={<Login />} />

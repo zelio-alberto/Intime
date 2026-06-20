@@ -59,6 +59,7 @@ export default function Header() {
             <Link to="/sobre" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/sobre" ? "text-accent" : "text-muted hover:text-fg")}>Sobre</Link>
             <a href="/#planos" className="text-[11px] font-mono tracking-[0.2em] uppercase text-muted hover:text-fg transition-colors">Planos</a>
             <Link to="/contacto" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/contacto" ? "text-accent" : "text-muted hover:text-fg")}>Contacto</Link>
+            <Link to="/conta" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/conta" ? "text-accent" : "text-muted hover:text-fg")}>Conta</Link>
           </nav>
 
           <div className="flex items-center gap-5">
@@ -87,6 +88,7 @@ export default function Header() {
           <Link to="/sobre" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Sobre</Link>
           <a href="/#planos" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Planos</a>
           <Link to="/contacto" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Contacto</Link>
+          <Link to="/conta" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Conta</Link>
           <Link to="/aderir" onClick={closeMenu} className="mt-8 flex items-center justify-center px-8 py-5 bg-fg text-bg font-mono text-xs tracking-widest font-bold uppercase transition-colors">
             Pedir instalação
           </Link>
