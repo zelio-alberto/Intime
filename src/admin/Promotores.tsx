@@ -7,6 +7,7 @@ import { UserPlus, Trash2, Copy, Check, Link2, Power, RefreshCcw, Ticket } from 
 
 type Promo = {
   codigo: string; nome?: string; email?: string; telefone?: string; whatsapp?: string;
+  metodoPagamento?: string; numeroPagamento?: string; nomePagamento?: string;
   numeroMpesa?: string; nomeMpesa?: string; zona?: string; percentagem?: number; ativo?: boolean;
 };
 type Stats = { leads: number; clientes: number; comissao: number };
@@ -33,7 +34,7 @@ export default function Promotores() {
   const { user } = useAdminAuth();
   const [promos, setPromos] = useState<Promo[]>([]);
   const [stats, setStats] = useState<Record<string, Stats>>({});
-  const [form, setForm] = useState({ nome: "", email: "", telefone: "", numeroMpesa: "" });
+  const [form, setForm] = useState({ nome: "", email: "", telefone: "", metodoPagamento: "M-Pesa", numeroPagamento: "" });
   const [msg, setMsg] = useState("");
   const [copied, setCopied] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
@@ -149,12 +150,13 @@ export default function Promotores() {
     try {
       const batch = writeBatch(db);
       batch.set(doc(db, "promotores", codigo), {
-        nome, email, telefone: form.telefone.trim(), numeroMpesa: form.numeroMpesa.trim(),
+        nome, email, telefone: form.telefone.trim(),
+        metodoPagamento: form.metodoPagamento, numeroPagamento: form.numeroPagamento.trim(),
         percentagem: COMISSAO_PADRAO, ativo: true, addedBy: user?.email || "", createdAt: serverTimestamp(),
       });
       batch.set(doc(db, "promotorEmails", email), { codigo, criadoEm: serverTimestamp() });
       await batch.commit();
-      setForm({ nome: "", email: "", telefone: "", numeroMpesa: "" });
+      setForm({ nome: "", email: "", telefone: "", metodoPagamento: "M-Pesa", numeroPagamento: "" });
       flash(`Promotor criado: ${codigo} ✓`);
       loadPromos();
     } catch { flash("Erro ao criar. Verifique as regras do Firestore."); }
@@ -227,7 +229,18 @@ export default function Promotores() {
           <div><label className={label}>Nome *</label><input className={input} placeholder="Nome do promotor" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></div>
           <div><label className={label}>Email Google * (login)</label><input className={input} placeholder="email@gmail.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
           <div><label className={label}>Telefone / WhatsApp</label><input className={input} placeholder="+258 8x xxx xxxx" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></div>
-          <div><label className={label}>Número M-Pesa (comissão)</label><input className={input} placeholder="Para receber a comissão" value={form.numeroMpesa} onChange={(e) => setForm({ ...form, numeroMpesa: e.target.value })} /></div>
+          <div>
+            <label className={label}>Receber comissão por</label>
+            <div className="flex gap-2">
+              {["M-Pesa", "e-Mola"].map((m) => (
+                <button type="button" key={m} onClick={() => setForm({ ...form, metodoPagamento: m })}
+                  className={`flex-1 py-2.5 font-mono text-[10px] uppercase tracking-widest border transition-colors ${form.metodoPagamento === m ? "bg-fg text-bg border-fg" : "border-line text-muted hover:text-fg hover:border-accent/50"}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="sm:col-span-2"><label className={label}>Número {form.metodoPagamento} (comissão)</label><input className={input} placeholder="Para receber a comissão" value={form.numeroPagamento} onChange={(e) => setForm({ ...form, numeroPagamento: e.target.value })} /></div>
         </div>
         <button onClick={add} className="flex items-center gap-2 bg-fg text-bg px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors">
           <UserPlus size={15} /> Criar promotor
@@ -251,6 +264,9 @@ export default function Promotores() {
                     {!ativo && <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-1 border border-line text-faint">inativo</span>}
                   </div>
                   <div className="text-faint text-xs font-mono">{p.email || "sem email"} · {pct}% · {p.telefone || p.whatsapp || "sem telefone"}{p.zona ? ` · ${p.zona}` : ""}</div>
+                  {(p.numeroPagamento || p.numeroMpesa) && (
+                    <div className="text-accent text-xs font-mono mt-1">{p.metodoPagamento || "M-Pesa"}: {p.numeroPagamento || p.numeroMpesa}{(p.nomePagamento || p.nomeMpesa) ? ` (${p.nomePagamento || p.nomeMpesa})` : ""}</div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => copyText(linkOf(p.codigo), p.codigo)} className="inline-flex items-center gap-2 px-3 py-2 border border-line text-fg font-mono text-[10px] uppercase tracking-widest hover:border-accent/50 transition-colors">

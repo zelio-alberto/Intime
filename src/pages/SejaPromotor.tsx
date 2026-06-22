@@ -32,7 +32,7 @@ export default function SejaPromotor() {
   const [erro, setErro] = useState("");
   const [copied, setCopied] = useState(false);
 
-  const [form, setForm] = useState({ nome: "", telefone: "", numeroMpesa: "", nomeMpesa: "", zona: "" });
+  const [form, setForm] = useState({ nome: "", telefone: "", metodoPagamento: "M-Pesa", numeroPagamento: "", nomePagamento: "", zona: "" });
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   // 1) Validar o link (convite de uso único).
@@ -74,8 +74,8 @@ export default function SejaPromotor() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!user?.email) return;
-    if (!form.nome.trim() || !form.telefone.trim() || !form.numeroMpesa.trim()) {
-      setErro("Preencha nome, telefone e número M-Pesa."); return;
+    if (!form.nome.trim() || !form.telefone.trim() || !form.numeroPagamento.trim()) {
+      setErro(`Preencha nome, telefone e número ${form.metodoPagamento}.`); return;
     }
     setBusy(true); setErro("");
     try {
@@ -84,7 +84,8 @@ export default function SejaPromotor() {
       const batch = writeBatch(db);
       batch.set(doc(db, "promotores", codigo), {
         nome: form.nome.trim(), email, telefone: form.telefone.trim(),
-        numeroMpesa: form.numeroMpesa.trim(), nomeMpesa: form.nomeMpesa.trim(), zona: form.zona.trim(),
+        metodoPagamento: form.metodoPagamento, numeroPagamento: form.numeroPagamento.trim(),
+        nomePagamento: form.nomePagamento.trim(), zona: form.zona.trim(),
         percentagem: 8, ativo: true, convite: token, createdAt: serverTimestamp(),
       });
       batch.set(doc(db, "promotorEmails", email), { codigo, criadoEm: serverTimestamp() });
@@ -159,8 +160,19 @@ export default function SejaPromotor() {
           <div className="space-y-4">
             <div><label className={lbl}>Nome completo *</label><input className={field} value={form.nome} onChange={(e) => set("nome", e.target.value)} /></div>
             <div><label className={lbl}>Telefone / WhatsApp *</label><input className={field} value={form.telefone} onChange={(e) => set("telefone", e.target.value)} placeholder="+258 8x xxx xxxx" /></div>
-            <div><label className={lbl}>Número M-Pesa (para receber a comissão) *</label><input className={field} value={form.numeroMpesa} onChange={(e) => set("numeroMpesa", e.target.value)} /></div>
-            <div><label className={lbl}>Nome registado na conta M-Pesa</label><input className={field} value={form.nomeMpesa} onChange={(e) => set("nomeMpesa", e.target.value)} placeholder="Se diferente do seu nome" /></div>
+            <div>
+              <label className={lbl}>Como quer receber a comissão? *</label>
+              <div className="flex gap-2">
+                {["M-Pesa", "e-Mola"].map((m) => (
+                  <button type="button" key={m} onClick={() => set("metodoPagamento", m)}
+                    className={`flex-1 py-3 font-mono text-xs uppercase tracking-widest border transition-colors ${form.metodoPagamento === m ? "bg-fg text-bg border-fg" : "border-line text-muted hover:text-fg hover:border-accent/50"}`}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div><label className={lbl}>Número {form.metodoPagamento} (para receber a comissão) *</label><input className={field} inputMode="numeric" value={form.numeroPagamento} onChange={(e) => set("numeroPagamento", e.target.value)} /></div>
+            <div><label className={lbl}>Nome registado na conta {form.metodoPagamento}</label><input className={field} value={form.nomePagamento} onChange={(e) => set("nomePagamento", e.target.value)} placeholder="Se diferente do seu nome" /></div>
             <div><label className={lbl}>Zona / cidade onde atua</label><input className={field} value={form.zona} onChange={(e) => set("zona", e.target.value)} /></div>
           </div>
           {erro && <p className="text-[#ff6b6b] text-sm mt-4">{erro}</p>}
