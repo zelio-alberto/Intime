@@ -6,6 +6,7 @@ import { ChevronRight, ArrowUpRight, Zap, Target, Globe, Satellite } from "lucid
 import { useSiteConfig } from "../useSiteConfig";
 import PlansSlider from "../components/PlansSlider";
 import RotatingText from "../components/RotatingText";
+import PromotoresBand from "../components/PromotoresBand";
 
 export default function Home() {
   const { scrollYProgress } = useScroll();
@@ -202,6 +203,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* PROMOTORES */}
+      <PromotoresBand />
 
       {/* CTA / COMANDO */}
       <section id="comando" className="py-40 bg-card relative overflow-hidden">
