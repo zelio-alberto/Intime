@@ -6,6 +6,7 @@ import { db } from "../firebase";
 import Layout from "../components/Layout";
 import LocationFields from "../components/LocationFields";
 import { useSiteConfig } from "../useSiteConfig";
+import { getRef } from "../referral";
 import { clsx } from "clsx";
 import { Check, CheckCircle2, MessageCircle, ChevronLeft, ArrowRight, Repeat } from "lucide-react";
 
@@ -48,7 +49,12 @@ export default function Aderir() {
     if (!aceite) return;
     setSending(true);
     try {
-      await addDoc(collection(db, "inscricoes"), { ...form, plano: planName, planoId: planId, status: "novo", createdAt: serverTimestamp() });
+      const promotor = getRef();
+      await addDoc(collection(db, "inscricoes"), {
+        ...form, plano: planName, planoId: planId, status: "novo",
+        ...(promotor ? { promotor } : {}),
+        createdAt: serverTimestamp(),
+      });
     } catch { /* sem regras / offline */ }
     setSending(false);
     setDone(true);

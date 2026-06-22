@@ -6,6 +6,9 @@ import Sobre from './pages/Sobre';
 import Contacto from './pages/Contacto';
 import Aderir from './pages/Aderir';
 import Conta from './pages/Conta';
+import Promotor from './pages/Promotor';
+import PromotorLink from './pages/PromotorLink';
+import SejaPromotor from './pages/SejaPromotor';
 
 import Login from './admin/Login';
 import AdminLayout from './admin/AdminLayout';
@@ -19,6 +22,7 @@ import Contactos from './admin/Contactos';
 import Frases from './admin/Frases';
 import Contrato from './admin/Contrato';
 import Membros from './admin/Membros';
+import Promotores from './admin/Promotores';
 
 export default function App() {
   return (
@@ -32,6 +36,9 @@ export default function App() {
         <Route path="/contacto" element={<Contacto />} />
         <Route path="/aderir" element={<Aderir />} />
         <Route path="/conta" element={<Conta />} />
+        <Route path="/promotor" element={<Promotor />} />
+        <Route path="/seja-promotor" element={<SejaPromotor />} />
+        <Route path="/p/:codigo" element={<PromotorLink />} />
 
         {/* Gestão */}
         <Route path="/admin/login" element={<Login />} />
@@ -46,6 +53,7 @@ export default function App() {
             <Route path="contactos" element={<Contactos />} />
             <Route path="frases" element={<Frases />} />
             <Route path="contrato" element={<Contrato />} />
+            <Route path="promotores" element={<Promotores />} />
             <Route path="membros" element={<Membros />} />
           </Route>
         </Route>

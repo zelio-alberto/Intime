@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { logEvent } from "firebase/analytics";
 import { analytics } from "./firebase";
+import { saveRef } from "./referral";
 
 /**
  * Regista uma visualização de página (page_view) sempre que a rota muda.
@@ -10,6 +11,12 @@ import { analytics } from "./firebase";
  */
 export default function Analytics() {
   const location = useLocation();
+
+  // Captura ?ref=CODIGO em qualquer página (fallback ao link /p/:codigo).
+  useEffect(() => {
+    const ref = new URLSearchParams(location.search).get("ref");
+    if (ref) saveRef(ref);
+  }, [location.search]);
 
   useEffect(() => {
     if (!analytics) return;

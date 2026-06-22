@@ -331,7 +331,9 @@ function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
     }
     await addDoc(collection(db, "pagamentos"), {
       clienteId: dados.clienteId || "", numeroConta: conta, clienteNome: dados.nome || "",
-      mes: monthKey(), valor, metodo, estado, viaPortal: true, data: serverTimestamp(), ...extra,
+      mes: monthKey(), valor, metodo, estado, viaPortal: true,
+      ...(dados.promotor ? { promotor: dados.promotor } : {}),
+      data: serverTimestamp(), ...extra,
     });
   };
 
