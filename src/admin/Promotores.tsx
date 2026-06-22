@@ -37,7 +37,7 @@ export default function Promotores() {
   const [msg, setMsg] = useState("");
   const [copied, setCopied] = useState("");
   const [sincronizando, setSincronizando] = useState(false);
-  const [convite, setConvite] = useState<string | null>(null);
+  const [convites, setConvites] = useState<string[]>([]);
   const [gerando, setGerando] = useState(false);
 
   const flash = (m: string) => { setMsg(m); setTimeout(() => setMsg(""), 3500); };
@@ -54,7 +54,15 @@ export default function Promotores() {
     } catch { return []; }
   };
 
-  useEffect(() => { loadPromos(); }, []);
+  // Lista os convites de cadastro ainda não usados.
+  const loadConvites = async () => {
+    try {
+      const s = await getDocs(collection(db, "promotorConvites"));
+      setConvites(s.docs.filter((d) => !d.data().usado).map((d) => d.id));
+    } catch { /* */ }
+  };
+
+  useEffect(() => { loadPromos(); loadConvites(); }, []);
 
   const existing = useMemo(() => new Set(promos.map((p) => p.codigo)), [promos]);
 
@@ -64,10 +72,16 @@ export default function Promotores() {
     const token = randomToken();
     try {
       await setDoc(doc(db, "promotorConvites", token), { usado: false, criadoPor: user?.email || "", criadoEm: serverTimestamp() });
-      setConvite(token);
       flash("Link de cadastro gerado ✓ — copie e envie a um promotor.");
+      loadConvites();
     } catch { flash("Erro ao gerar. Verifique as regras do Firestore."); }
     finally { setGerando(false); }
+  };
+
+  const revogarConvite = async (token: string) => {
+    if (!confirm("Revogar este link de cadastro? Deixa de funcionar.")) return;
+    try { await deleteDoc(doc(db, "promotorConvites", token)); loadConvites(); }
+    catch { flash("Erro ao revogar."); }
   };
 
   /**
@@ -162,7 +176,7 @@ export default function Promotores() {
   };
 
   const linkOf = (codigo: string) => `${window.location.origin}/p/${codigo}`;
-  const conviteUrl = convite ? `${window.location.origin}/seja-promotor?c=${convite}` : "";
+  const conviteUrlOf = (token: string) => `${window.location.origin}/seja-promotor?c=${token}`;
   const copyText = async (text: string, key: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(""), 2000); }
     catch { flash("Não foi possível copiar."); }
@@ -180,24 +194,28 @@ export default function Promotores() {
       </div>
       <p className={pageSub}>Gere um link de cadastro de uso único para cada promotor, ou cadastre diretamente. Acompanhe leads, clientes e comissão (8% por pagamento recebido).</p>
 
-      {/* Link de cadastro (uso único) */}
+      {/* Links de cadastro (uso único) */}
       <section className={card + " mb-6"}>
-        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint mb-3"><Ticket size={14} /> Link de cadastro (uso único)</div>
-        {convite ? (
-          <>
-            <div className="flex flex-wrap items-center gap-3 mb-3">
-              <code className="flex-1 min-w-0 break-all text-fg text-sm">{conviteUrl}</code>
-              <button onClick={() => copyText(conviteUrl, "convite")} className="inline-flex items-center gap-2 px-4 py-2.5 bg-fg text-bg font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-accent transition-colors">
-                {copied === "convite" ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
-              </button>
-            </div>
-            <p className="text-faint text-xs">Envie a um único promotor. Quando ele se registar, este link deixa de funcionar. Para outro promotor, gere um novo.</p>
-            <button onClick={gerarConvite} disabled={gerando} className="mt-4 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg underline">Gerar outro link</button>
-          </>
-        ) : (
-          <button onClick={gerarConvite} disabled={gerando} className="flex items-center gap-2 bg-fg text-bg px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
-            <Ticket size={15} /> {gerando ? "A gerar…" : "Gerar link de cadastro"}
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint"><Ticket size={14} /> Links de cadastro por usar ({convites.length})</div>
+          <button onClick={gerarConvite} disabled={gerando} className="flex items-center gap-2 bg-fg text-bg px-4 py-2 font-mono text-[10px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50 whitespace-nowrap">
+            <Ticket size={14} /> {gerando ? "A gerar…" : "Gerar link"}
           </button>
+        </div>
+        {convites.length === 0 ? (
+          <p className="text-faint text-xs">Sem links por usar. Gere um e envie a um promotor — quando ele se registar, o link deixa de funcionar.</p>
+        ) : (
+          <div className="space-y-2">
+            {convites.map((t) => (
+              <div key={t} className="flex flex-wrap items-center gap-2 border border-line/60 px-3 py-2">
+                <code className="flex-1 min-w-0 break-all text-fg text-xs">{conviteUrlOf(t)}</code>
+                <button onClick={() => copyText(conviteUrlOf(t), t)} className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-line text-fg font-mono text-[10px] uppercase tracking-widest hover:border-accent/50 transition-colors">
+                  {copied === t ? <><Check size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
+                </button>
+                <button onClick={() => revogarConvite(t)} className="text-faint hover:text-accent p-1.5" title="Revogar"><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
