@@ -12,7 +12,7 @@ import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, MessageCircle, Check, Clock, X as XIcon,
-  RefreshCcw, Ban, User as UserIcon, Copy, Link2, Users, UserCheck,
+  RefreshCcw, Ban, Copy, Link2, Users, UserCheck,
   Wallet, Wifi, Megaphone, ArrowRight,
 } from "lucide-react";
 
@@ -170,6 +170,9 @@ export default function Conta() {
   const isCliente = contaExiste;
   const isLead = !!lead && !isCliente;
   const isPromotor = !!promo && !!codigo;
+  // quem é só promotor (sem conta nem pedido) deve aterrar no painel de promotor,
+  // não num apelo a "tornar-se cliente". Define quem lidera a página.
+  const promotorPrimary = isPromotor && !isCliente && !isLead;
   const nome = String(dados.nome || promo?.nome || gName || "");
 
   return (
@@ -179,7 +182,7 @@ export default function Conta() {
           {!authReady && !manualConta
             ? <p className="text-muted text-sm">A carregar…</p>
             : !hasSession
-              ? <Login onEntrarConta={entrarConta} onEntrarGoogle={entrarGoogle} />
+              ? <Login cfg={cfg} onEntrarConta={entrarConta} onEntrarGoogle={entrarGoogle} />
               : (
                 <>
                   {/* identidade + sair (um só, partilhado) */}
@@ -197,23 +200,39 @@ export default function Conta() {
                     </button>
                   </div>
 
-                  {/* ===== ÁREA DE CLIENTE ===== */}
-                  <div className="mb-14">
-                    <div className={sectionLbl}><Wifi size={13} /> A minha Starlink</div>
-                    {isCliente
-                      ? <ClientePortal conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />
-                      : isLead
-                        ? <LeadStatus lead={lead!} />
-                        : <CtaCliente />}
-                  </div>
-
-                  {/* ===== ÁREA DE PROMOTOR ===== */}
-                  <div>
-                    <div className={sectionLbl}><Megaphone size={13} /> Promotor</div>
-                    {isPromotor
-                      ? <PromotorPainel codigo={codigo!} promo={promo!} />
-                      : <TeaserPromotor temGoogle={!!gEmail} />}
-                  </div>
+                  {/* secções na ordem do papel PRINCIPAL — quem é só promotor vê
+                      o painel de promotor primeiro; cliente/lead lideram com a Starlink. */}
+                  {(() => {
+                    const clienteSection = (
+                      <>
+                        <div className={sectionLbl}><Wifi size={13} /> A minha Starlink</div>
+                        {isCliente
+                          ? <ClientePortal conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />
+                          : isLead
+                            ? <LeadStatus lead={lead!} />
+                            : promotorPrimary
+                              ? <CtaClienteSlim />
+                              : <CtaCliente />}
+                      </>
+                    );
+                    const promotorSection = (
+                      <>
+                        <div className={sectionLbl}><Megaphone size={13} /> Promotor</div>
+                        {isPromotor
+                          ? <PromotorPainel codigo={codigo!} promo={promo!} />
+                          : <TeaserPromotor temGoogle={!!gEmail} />}
+                      </>
+                    );
+                    const [first, second] = promotorPrimary
+                      ? [promotorSection, clienteSection]
+                      : [clienteSection, promotorSection];
+                    return (
+                      <>
+                        <div className="mb-14">{first}</div>
+                        <div>{second}</div>
+                      </>
+                    );
+                  })()}
                 </>
               )}
         </div>
@@ -229,11 +248,27 @@ export default function Conta() {
 }
 
 /* ===================== LOGIN ===================== */
-function Login({ onEntrarConta, onEntrarGoogle }: { onEntrarConta: (c: string) => void; onEntrarGoogle: () => Promise<void> }) {
+/* Logótipo Google multicolor (lucide não traz a marca) */
+function GoogleIcon({ size = 17 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden focusable="false">
+      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/>
+      <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/>
+      <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/>
+      <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/>
+    </svg>
+  );
+}
+
+function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
+  cfg: ReturnType<typeof useSiteConfig>; onEntrarConta: (c: string) => void; onEntrarGoogle: () => Promise<void>;
+}) {
   const [conta, setConta] = useState("");
   const [last4, setLast4] = useState("");
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
+  const [showConta, setShowConta] = useState(false);
+  const tagline = cfg.taglines && cfg.taglines.length ? cfg.taglines[0] : "A sua casa ligada ao mundo.";
 
   const entrarConta = async () => {
     const c = conta.trim().toUpperCase();
@@ -257,43 +292,80 @@ function Login({ onEntrarConta, onEntrarGoogle }: { onEntrarConta: (c: string) =
   };
 
   return (
-    <>
-      <div className="mb-10">
-        <span className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-5 block">Portal Intime</span>
-        <h1 className="text-4xl md:text-6xl font-display font-medium text-fg tracking-tighter mb-4">Entrar.</h1>
-        <p className="text-lg text-muted font-light border-l border-line pl-6">
-          Cliente, promotor ou a pedir instalação — entre aqui. Com o Google reconhecemos automaticamente a sua conta.
-        </p>
+    <div className="border border-line bg-card/20 grid lg:grid-cols-[1fr_1.05fr] overflow-hidden conta-fade">
+      {/* ---- ESQUERDA: painel de marca ---- */}
+      <div className="relative hidden lg:flex flex-col justify-between p-10 bg-card/40 border-r border-line overflow-hidden">
+        <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-accent/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-20 w-72 h-72 rounded-full bg-accent/10 blur-3xl" />
+
+        <div className="relative flex items-center gap-3">
+          <img src="/logo-intime.png" alt="Intime" className="logo-img w-9 h-9" draggable={false} />
+          <span className="font-display font-bold text-2xl text-fg tracking-tight">INTIME</span>
+        </div>
+
+        <div className="relative">
+          <h2 className="font-display text-3xl xl:text-4xl text-fg leading-[1.1] tracking-tight mb-7">{tagline}</h2>
+          <ul className="space-y-3.5">
+            {([[Wifi, "Subscrição, pagamentos e faturas"], [Megaphone, "Link e comissões de promotor"], [Clock, "Estado do pedido de instalação"]] as const).map(([Ic, t], i) => (
+              <li key={i} className="flex items-center gap-3 text-muted text-sm">
+                <span className="w-7 h-7 grid place-items-center border border-line text-accent shrink-0"><Ic size={14} /></span>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="relative font-mono text-[10px] uppercase tracking-[0.25em] text-faint">Portal seguro</div>
       </div>
 
-      <div className={cardCls}>
-        {/* Google primeiro: é o que liga cliente + promotor + pedidos */}
+      {/* ---- DIREITA: formulário ---- */}
+      <div className="p-8 md:p-10">
+        <div className="lg:hidden flex items-center gap-3 mb-8">
+          <img src="/logo-intime.png" alt="Intime" className="logo-img w-8 h-8" draggable={false} />
+          <span className="font-display font-bold text-xl text-fg tracking-tight">INTIME</span>
+        </div>
+
+        <span className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-3 block">Portal Intime</span>
+        <h1 className="text-4xl md:text-5xl font-display font-medium text-fg tracking-tighter mb-3">Entrar.</h1>
+        <p className="text-muted text-sm mb-8 leading-relaxed">
+          Cliente, promotor ou a pedir instalação — uma só entrada. Com o Google reconhecemos a sua conta automaticamente.
+        </p>
+
         <button className={btnPrimary} disabled={busy} onClick={entrarGoogle}>
-          <UserIcon size={15} /> {busy ? "A entrar…" : "Entrar com Google"}
+          {busy ? "A entrar…" : <><GoogleIcon size={17} /> Continuar com Google</>}
         </button>
 
-        <div className="flex items-center gap-4 my-6 text-faint text-xs">
-          <span className="flex-1 h-px bg-line" /> ou com nº de conta <span className="flex-1 h-px bg-line" />
-        </div>
+        {erro && <p className="text-[#ff6b6b] text-sm mt-4">{erro}</p>}
 
-        <div className="mb-4">
-          <label className={lbl}>Número de conta</label>
-          <input className={field} placeholder="IN-0000" spellCheck={false} value={conta} onChange={(e) => setConta(e.target.value)} />
-        </div>
-        <div className="mb-3">
-          <label className={lbl}>Últimos 4 dígitos do WhatsApp</label>
-          <input className={field} placeholder="0000" inputMode="numeric" maxLength={4} value={last4}
-            onChange={(e) => setLast4(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") entrarConta(); }} />
-        </div>
-        {erro && <p className="text-[#ff6b6b] text-sm mb-3">{erro}</p>}
-        <button className={btnGhost} disabled={busy} onClick={entrarConta}>{busy ? "A entrar…" : "Entrar com nº de conta"}</button>
+        {!showConta ? (
+          <button onClick={() => { setShowConta(true); setErro(""); }}
+            className="w-full text-center text-muted text-sm mt-5 hover:text-fg transition-colors underline underline-offset-4 decoration-line">
+            Entrar com número de conta
+          </button>
+        ) : (
+          <div className="mt-7 conta-fade">
+            <div className="flex items-center gap-4 mb-6 text-faint text-[11px] uppercase tracking-widest font-mono">
+              <span className="flex-1 h-px bg-line" /> nº de conta <span className="flex-1 h-px bg-line" />
+            </div>
+            <div className="mb-4">
+              <label className={lbl}>Número de conta</label>
+              <input className={field} placeholder="IN-0000" spellCheck={false} value={conta} onChange={(e) => setConta(e.target.value)} />
+            </div>
+            <div className="mb-4">
+              <label className={lbl}>Últimos 4 dígitos do WhatsApp</label>
+              <input className={field} placeholder="0000" inputMode="numeric" maxLength={4} value={last4}
+                onChange={(e) => setLast4(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") entrarConta(); }} />
+            </div>
+            <button className={btnGhost} disabled={busy} onClick={entrarConta}>{busy ? "A entrar…" : "Entrar com nº de conta"}</button>
+          </div>
+        )}
 
-        <p className="text-center text-muted text-sm mt-6">
+        <p className="text-muted text-sm mt-9 pt-6 border-t border-line">
           Ainda não é cliente? <Link to="/aderir" className="underline hover:text-fg">Pedir instalação</Link>.
         </p>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -612,6 +684,21 @@ function CtaCliente() {
       <p className="text-muted text-sm mb-6 max-w-md mx-auto">Peça a instalação e acompanhe aqui o estado do seu pedido até ficar online.</p>
       <Link to="/aderir" className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors">
         Pedir instalação <ArrowRight size={15} />
+      </Link>
+    </div>
+  );
+}
+
+/* CTA fina: para promotores (papel principal) — convida a ter Starlink sem dominar a página */
+function CtaClienteSlim() {
+  return (
+    <div className="border border-line p-5 bg-card/20 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-3">
+        <Wifi size={18} className="text-accent shrink-0" />
+        <span className="text-muted text-sm">Também quer Starlink em casa ou no negócio?</span>
+      </div>
+      <Link to="/aderir" className="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] font-bold text-fg hover:text-accent transition-colors">
+        Pedir instalação <ArrowRight size={14} />
       </Link>
     </div>
   );

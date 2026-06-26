@@ -89,3 +89,10 @@ html.dark .logo-img { filter: invert(1) brightness(1.9); }
   background-color: var(--accent);
   color: var(--bg);
 }
+
+/* entrada suave do portal /conta (login + formulário recolhível) */
+@keyframes contaFade {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.conta-fade { animation: contaFade 0.4s ease both; }
