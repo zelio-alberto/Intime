@@ -60,7 +60,6 @@ export default function Header() {
             <a href="/#planos" className="text-[11px] font-mono tracking-[0.2em] uppercase text-muted hover:text-fg transition-colors">Planos</a>
             <a href="/#promotores" className="text-[11px] font-mono tracking-[0.2em] uppercase text-muted hover:text-fg transition-colors">Promotores</a>
             <Link to="/contacto" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/contacto" ? "text-accent" : "text-muted hover:text-fg")}>Contacto</Link>
-            <Link to="/conta" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/conta" ? "text-accent" : "text-muted hover:text-fg")}>Entrar</Link>
           </nav>
 
           <div className="flex items-center gap-5">
@@ -71,6 +70,9 @@ export default function Header() {
             >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+            <Link to="/conta" className="hidden lg:inline-flex items-center justify-center px-5 py-3 text-[11px] font-mono uppercase tracking-[0.2em] border border-line text-fg hover:border-accent/60 hover:text-accent transition-colors font-bold">
+              Entrar
+            </Link>
             <Link to="/aderir" className="hidden lg:inline-flex items-center justify-center px-6 py-3 text-[11px] font-mono uppercase tracking-[0.2em] bg-fg text-bg hover:bg-accent transition-colors font-bold">
               Pedir instalação
             </Link>
@@ -90,10 +92,14 @@ export default function Header() {
           <a href="/#planos" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Planos</a>
           <a href="/#promotores" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Promotores</a>
           <Link to="/contacto" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Contacto</Link>
-          <Link to="/conta" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Entrar</Link>
-          <Link to="/aderir" onClick={closeMenu} className="mt-8 flex items-center justify-center px-8 py-5 bg-fg text-bg font-mono text-xs tracking-widest font-bold uppercase transition-colors">
-            Pedir instalação
-          </Link>
+          <div className="mt-8 grid grid-cols-2 gap-3">
+            <Link to="/conta" onClick={closeMenu} className="flex items-center justify-center px-6 py-5 border border-line text-fg font-mono text-xs tracking-widest font-bold uppercase hover:border-accent/60 transition-colors">
+              Entrar
+            </Link>
+            <Link to="/aderir" onClick={closeMenu} className="flex items-center justify-center px-6 py-5 bg-fg text-bg font-mono text-xs tracking-widest font-bold uppercase transition-colors">
+              Pedir instalação
+            </Link>
+          </div>
         </div>
       )}
     </>
