@@ -73,6 +73,15 @@ const btnGhost = "w-full py-3.5 border border-line text-fg font-mono text-xs upp
 const cardCls = "border border-line p-6 md:p-8 bg-card/30";
 const sectionLbl = "font-mono text-accent text-[10px] uppercase tracking-[0.25em] mb-4 flex items-center gap-2";
 
+/* badge de papel (Cliente / Pedido / Promotor) na faixa de identidade */
+function RoleBadge({ icon: Ic, label, accent }: { icon: typeof Wifi; label: string; accent?: boolean }) {
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.2em] px-2.5 py-1 border ${accent ? "text-accent border-accent/40 bg-accent/10" : "text-muted border-line bg-card/40"}`}>
+      <Ic size={12} /> {label}
+    </span>
+  );
+}
+
 /* ===================== ORQUESTRADOR ===================== */
 export default function Conta() {
   const cfg = useSiteConfig();
@@ -175,75 +184,88 @@ export default function Conta() {
   const promotorPrimary = isPromotor && !isCliente && !isLead;
   const nome = String(dados.nome || promo?.nome || gName || "");
 
+  if (!authReady && !manualConta) {
+    return (
+      <Layout>
+        <div className="min-h-screen grid place-items-center px-6"><p className="text-muted text-sm">A carregar…</p></div>
+      </Layout>
+    );
+  }
+
+  if (!hasSession) {
+    return (
+      <Layout>
+        <Login cfg={cfg} onEntrarConta={entrarConta} onEntrarGoogle={entrarGoogle} />
+        {toast && <Toast msg={toast} />}
+      </Layout>
+    );
+  }
+
+  const clienteSection = (
+    <>
+      <div className={sectionLbl}><Wifi size={13} /> A minha Starlink</div>
+      {isCliente
+        ? <ClientePortal conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />
+        : isLead
+          ? <LeadStatus lead={lead!} />
+          : promotorPrimary
+            ? <CtaClienteSlim />
+            : <CtaCliente />}
+    </>
+  );
+  const promotorSection = (
+    <>
+      <div className={sectionLbl}><Megaphone size={13} /> Promotor</div>
+      {isPromotor
+        ? <PromotorPainel codigo={codigo!} promo={promo!} />
+        : <TeaserPromotor temGoogle={!!gEmail} />}
+    </>
+  );
+  const [first, second] = promotorPrimary ? [promotorSection, clienteSection] : [clienteSection, promotorSection];
+
   return (
     <Layout>
-      <section className="pt-40 pb-24 min-h-screen">
-        <div className="max-w-[820px] mx-auto px-6 lg:px-12">
-          {!authReady && !manualConta
-            ? <p className="text-muted text-sm">A carregar…</p>
-            : !hasSession
-              ? <Login cfg={cfg} onEntrarConta={entrarConta} onEntrarGoogle={entrarGoogle} />
-              : (
-                <>
-                  {/* identidade + sair (um só, partilhado) */}
-                  <div className="flex items-center justify-between gap-4 flex-wrap mb-10">
-                    <div>
-                      <div className="font-display text-2xl text-fg">{nome || "A minha conta"}</div>
-                      <div className="text-muted text-sm">
-                        {isCliente ? <>Conta <span className="font-mono text-fg">{conta}</span></>
-                          : isLead ? "Pedido de instalação"
-                          : gEmail ? <span className="font-mono text-fg">{gEmail}</span> : "Visitante"}
-                      </div>
-                    </div>
-                    <button onClick={sair} className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg px-3 py-1.5 border border-line transition-colors">
-                      <LogOut size={13} /> Sair
-                    </button>
-                  </div>
+      <section className="pt-32 lg:pt-36 pb-28 min-h-screen">
+        {/* ===== FAIXA DE IDENTIDADE (largura ampla) ===== */}
+        <div className="border-b border-line pb-10 mb-12">
+          <div className="max-w-[1280px] mx-auto px-6 lg:px-12 flex items-end justify-between gap-6 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                {isCliente && <RoleBadge icon={Wifi} label="Cliente" />}
+                {isLead && <RoleBadge icon={Clock} label="Pedido" />}
+                {isPromotor && <RoleBadge icon={Megaphone} label="Promotor" accent />}
+              </div>
+              <h1 className="font-display text-4xl md:text-6xl xl:text-7xl text-fg tracking-tight leading-[0.95]">{nome || "A minha conta"}</h1>
+              <div className="text-muted text-sm mt-4">
+                {isCliente ? <>Conta <span className="font-mono text-fg">{conta}</span></>
+                  : isLead ? "Pedido de instalação em curso"
+                  : gEmail ? <span className="font-mono text-fg">{gEmail}</span> : "Visitante"}
+              </div>
+            </div>
+            <button onClick={sair} className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg px-4 py-2.5 border border-line hover:border-accent/40 transition-colors">
+              <LogOut size={13} /> Sair
+            </button>
+          </div>
+        </div>
 
-                  {/* secções na ordem do papel PRINCIPAL — quem é só promotor vê
-                      o painel de promotor primeiro; cliente/lead lideram com a Starlink. */}
-                  {(() => {
-                    const clienteSection = (
-                      <>
-                        <div className={sectionLbl}><Wifi size={13} /> A minha Starlink</div>
-                        {isCliente
-                          ? <ClientePortal conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />
-                          : isLead
-                            ? <LeadStatus lead={lead!} />
-                            : promotorPrimary
-                              ? <CtaClienteSlim />
-                              : <CtaCliente />}
-                      </>
-                    );
-                    const promotorSection = (
-                      <>
-                        <div className={sectionLbl}><Megaphone size={13} /> Promotor</div>
-                        {isPromotor
-                          ? <PromotorPainel codigo={codigo!} promo={promo!} />
-                          : <TeaserPromotor temGoogle={!!gEmail} />}
-                      </>
-                    );
-                    const [first, second] = promotorPrimary
-                      ? [promotorSection, clienteSection]
-                      : [clienteSection, promotorSection];
-                    return (
-                      <>
-                        <div className="mb-14">{first}</div>
-                        <div>{second}</div>
-                      </>
-                    );
-                  })()}
-                </>
-              )}
+        {/* ===== CONTEÚDO (largura ampla) ===== */}
+        <div className="max-w-[1280px] mx-auto px-6 lg:px-12 space-y-16">
+          <div>{first}</div>
+          <div>{second}</div>
         </div>
       </section>
 
-      {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 bottom-7 z-[500] bg-fg text-bg px-6 py-3.5 text-sm font-medium shadow-2xl">
-          {toast}
-        </div>
-      )}
+      {toast && <Toast msg={toast} />}
     </Layout>
+  );
+}
+
+/* toast partilhado */
+function Toast({ msg }: { msg: string }) {
+  return (
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-7 z-[500] bg-fg text-bg px-6 py-3.5 text-sm font-medium shadow-2xl">
+      {msg}
+    </div>
   );
 }
 
@@ -292,80 +314,80 @@ function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
   };
 
   return (
-    <div className="border border-line bg-card/20 grid lg:grid-cols-[1fr_1.05fr] overflow-hidden conta-fade">
-      {/* ---- ESQUERDA: painel de marca ---- */}
-      <div className="relative hidden lg:flex flex-col justify-between p-10 bg-card/40 border-r border-line overflow-hidden">
-        <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-accent/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -left-20 w-72 h-72 rounded-full bg-accent/10 blur-3xl" />
+    <section className="relative min-h-screen w-full grid lg:grid-cols-2 conta-fade">
+      {/* ---- ESQUERDA: imersivo, ecrã inteiro ---- */}
+      <div className="relative hidden lg:flex flex-col justify-between px-14 xl:px-24 pt-40 pb-16 overflow-hidden bg-card/30 border-r border-line">
+        <div className="pointer-events-none absolute -top-40 -right-40 w-[36rem] h-[36rem] rounded-full bg-accent/20 blur-[120px]" />
+        <div className="pointer-events-none absolute -bottom-52 -left-32 w-[34rem] h-[34rem] rounded-full bg-accent/10 blur-[120px]" />
+        <div className="pointer-events-none absolute inset-0 text-fg opacity-[0.04]" style={{ backgroundImage: "radial-gradient(currentColor 1px, transparent 1px)", backgroundSize: "22px 22px" }} />
 
-        <div className="relative flex items-center gap-3">
-          <img src="/logo-intime.png" alt="Intime" className="logo-img w-9 h-9" draggable={false} />
-          <span className="font-display font-bold text-2xl text-fg tracking-tight">INTIME</span>
-        </div>
+        <span className="relative font-mono text-accent text-[11px] uppercase tracking-[0.3em]">Portal Intime</span>
 
-        <div className="relative">
-          <h2 className="font-display text-3xl xl:text-4xl text-fg leading-[1.1] tracking-tight mb-7">{tagline}</h2>
-          <ul className="space-y-3.5">
-            {([[Wifi, "Subscrição, pagamentos e faturas"], [Megaphone, "Link e comissões de promotor"], [Clock, "Estado do pedido de instalação"]] as const).map(([Ic, t], i) => (
-              <li key={i} className="flex items-center gap-3 text-muted text-sm">
-                <span className="w-7 h-7 grid place-items-center border border-line text-accent shrink-0"><Ic size={14} /></span>
+        <div className="relative max-w-xl">
+          <h2 className="font-display text-5xl xl:text-7xl text-fg leading-[0.98] tracking-tight mb-9">{tagline}</h2>
+          <ul className="space-y-4">
+            {([[Wifi, "Subscrição, pagamentos e faturas num só lugar"], [Megaphone, "O seu link e comissões de promotor"], [Clock, "O estado do seu pedido de instalação"]] as const).map(([Ic, t], i) => (
+              <li key={i} className="flex items-center gap-4 text-muted text-base">
+                <span className="w-10 h-10 grid place-items-center border border-line text-accent shrink-0 bg-bg/40"><Ic size={17} /></span>
                 {t}
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="relative font-mono text-[10px] uppercase tracking-[0.25em] text-faint">Portal seguro</div>
+        <div className="relative font-mono text-[10px] uppercase tracking-[0.3em] text-faint">Intime · Starlink em Moçambique</div>
       </div>
 
-      {/* ---- DIREITA: formulário ---- */}
-      <div className="p-8 md:p-10">
-        <div className="lg:hidden flex items-center gap-3 mb-8">
-          <img src="/logo-intime.png" alt="Intime" className="logo-img w-8 h-8" draggable={false} />
-          <span className="font-display font-bold text-xl text-fg tracking-tight">INTIME</span>
-        </div>
-
-        <span className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-3 block">Portal Intime</span>
-        <h1 className="text-4xl md:text-5xl font-display font-medium text-fg tracking-tighter mb-3">Entrar.</h1>
-        <p className="text-muted text-sm mb-8 leading-relaxed">
-          Cliente, promotor ou a pedir instalação — uma só entrada. Com o Google reconhecemos a sua conta automaticamente.
-        </p>
-
-        <button className={btnPrimary} disabled={busy} onClick={entrarGoogle}>
-          {busy ? "A entrar…" : <><GoogleIcon size={17} /> Continuar com Google</>}
-        </button>
-
-        {erro && <p className="text-[#ff6b6b] text-sm mt-4">{erro}</p>}
-
-        {!showConta ? (
-          <button onClick={() => { setShowConta(true); setErro(""); }}
-            className="w-full text-center text-muted text-sm mt-5 hover:text-fg transition-colors underline underline-offset-4 decoration-line">
-            Entrar com número de conta
-          </button>
-        ) : (
-          <div className="mt-7 conta-fade">
-            <div className="flex items-center gap-4 mb-6 text-faint text-[11px] uppercase tracking-widest font-mono">
-              <span className="flex-1 h-px bg-line" /> nº de conta <span className="flex-1 h-px bg-line" />
-            </div>
-            <div className="mb-4">
-              <label className={lbl}>Número de conta</label>
-              <input className={field} placeholder="IN-0000" spellCheck={false} value={conta} onChange={(e) => setConta(e.target.value)} />
-            </div>
-            <div className="mb-4">
-              <label className={lbl}>Últimos 4 dígitos do WhatsApp</label>
-              <input className={field} placeholder="0000" inputMode="numeric" maxLength={4} value={last4}
-                onChange={(e) => setLast4(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") entrarConta(); }} />
-            </div>
-            <button className={btnGhost} disabled={busy} onClick={entrarConta}>{busy ? "A entrar…" : "Entrar com nº de conta"}</button>
+      {/* ---- DIREITA: formulário centrado e espaçoso ---- */}
+      <div className="relative flex items-center justify-center px-6 sm:px-10 pt-32 pb-20 lg:py-20">
+        <div className="w-full max-w-md">
+          <div className="lg:hidden flex items-center gap-3 mb-10">
+            <img src="/logo-intime.png" alt="Intime" className="logo-img w-9 h-9" draggable={false} />
+            <span className="font-display font-bold text-2xl text-fg tracking-tight">INTIME</span>
           </div>
-        )}
 
-        <p className="text-muted text-sm mt-9 pt-6 border-t border-line">
-          Ainda não é cliente? <Link to="/aderir" className="underline hover:text-fg">Pedir instalação</Link>.
-        </p>
+          <span className="font-mono text-accent text-[10px] uppercase tracking-[0.25em] mb-4 block">Bem-vindo de volta</span>
+          <h1 className="text-5xl md:text-6xl font-display font-medium text-fg tracking-tighter mb-4">Entrar.</h1>
+          <p className="text-muted text-base mb-10 leading-relaxed">
+            Cliente, promotor ou a pedir instalação — uma só entrada. Com o Google reconhecemos a sua conta automaticamente.
+          </p>
+
+          <button className={btnPrimary + " !py-5"} disabled={busy} onClick={entrarGoogle}>
+            {busy ? "A entrar…" : <><GoogleIcon size={18} /> Continuar com Google</>}
+          </button>
+
+          {erro && <p className="text-[#ff6b6b] text-sm mt-4">{erro}</p>}
+
+          {!showConta ? (
+            <button onClick={() => { setShowConta(true); setErro(""); }}
+              className="w-full text-center text-muted text-sm mt-6 hover:text-fg transition-colors underline underline-offset-4 decoration-line">
+              Entrar com número de conta
+            </button>
+          ) : (
+            <div className="mt-8 conta-fade">
+              <div className="flex items-center gap-4 mb-6 text-faint text-[11px] uppercase tracking-widest font-mono">
+                <span className="flex-1 h-px bg-line" /> nº de conta <span className="flex-1 h-px bg-line" />
+              </div>
+              <div className="mb-4">
+                <label className={lbl}>Número de conta</label>
+                <input className={field} placeholder="IN-0000" spellCheck={false} value={conta} onChange={(e) => setConta(e.target.value)} />
+              </div>
+              <div className="mb-4">
+                <label className={lbl}>Últimos 4 dígitos do WhatsApp</label>
+                <input className={field} placeholder="0000" inputMode="numeric" maxLength={4} value={last4}
+                  onChange={(e) => setLast4(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") entrarConta(); }} />
+              </div>
+              <button className={btnGhost} disabled={busy} onClick={entrarConta}>{busy ? "A entrar…" : "Entrar com nº de conta"}</button>
+            </div>
+          )}
+
+          <p className="text-muted text-sm mt-10 pt-7 border-t border-line">
+            Ainda não é cliente? <Link to="/aderir" className="underline hover:text-fg">Pedir instalação</Link>.
+          </p>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -458,11 +480,11 @@ function TabConta({ conta, dados, cfg, showToast }: {
   };
 
   return (
-    <div className="space-y-6">
-      <div className={cardCls}>
+    <div className="grid lg:grid-cols-2 gap-6 items-start">
+      <div className={cardCls + " lg:row-span-2"}>
         <h3 className="font-display text-xl text-fg mb-5">Detalhes da subscrição</h3>
         {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4 py-3 border-b border-line/60 last:border-0">
+          <div key={k} className="flex justify-between gap-4 py-3.5 border-b border-line/60 last:border-0">
             <span className="text-muted text-sm">{k}</span>
             <span className="text-fg font-medium text-right">{v}</span>
           </div>
@@ -549,12 +571,15 @@ function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
 
   return (
     <div className="space-y-6">
-      <div className={cardCls + " bg-card/50"}>
-        <div className="text-faint text-[11px] font-mono uppercase tracking-widest">Valor a pagar este mês</div>
-        <div className="font-display text-5xl text-fg mt-1">{dados.mensalidade ?? "—"} <span className="text-xl text-muted">MT</span></div>
-        {atraso && <p className="text-[#ff6b6b] text-sm mt-3">⚠ Conta em atraso — regularize assim que possível.</p>}
+      <div className={cardCls + " bg-card/50 flex flex-wrap items-end justify-between gap-4"}>
+        <div>
+          <div className="text-faint text-[11px] font-mono uppercase tracking-widest">Valor a pagar este mês</div>
+          <div className="font-display text-6xl text-fg mt-1">{dados.mensalidade ?? "—"} <span className="text-2xl text-muted">MT</span></div>
+        </div>
+        {atraso && <p className="text-[#ff6b6b] text-sm">⚠ Conta em atraso — regularize assim que possível.</p>}
       </div>
 
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
       <div className={cardCls}>
         <h3 className="font-display text-xl text-fg mb-4">Como pagar</h3>
         <div className="flex flex-wrap gap-2 mb-5">
@@ -625,6 +650,7 @@ function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
             })}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -743,9 +769,9 @@ function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData
           { icon: Wallet, n: `${comissao} MT`, l: "Comissão", accent: true },
         ].map((s, i) => (
           <div key={i} className={cardCls + " text-center"}>
-            <s.icon size={18} className="mx-auto mb-2 text-faint" />
-            <div className={`font-display text-3xl ${s.accent ? "text-accent" : "text-fg"}`}>{s.n}</div>
-            <div className="text-[10px] font-mono uppercase text-faint mt-1">{s.l}</div>
+            <s.icon size={20} className="mx-auto mb-3 text-faint" />
+            <div className={`font-display text-4xl md:text-5xl ${s.accent ? "text-accent" : "text-fg"}`}>{s.n}</div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-faint mt-2">{s.l}</div>
           </div>
         ))}
       </div>
@@ -756,7 +782,8 @@ function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData
         </div>
       )}
 
-      <div className={cardCls + " mb-6"}>
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
+      <div className={cardCls}>
         <h3 className="font-display text-xl text-fg mb-4">Os meus clientes</h3>
         {clientes.length === 0
           ? <p className="text-muted text-sm">Ainda não há clientes confirmados. Assim que um lead seu virar cliente, aparece aqui.</p>
@@ -784,6 +811,7 @@ function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData
                 </div>
               );
             })}</div>}
+      </div>
       </div>
     </>
   );
