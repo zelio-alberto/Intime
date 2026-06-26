@@ -2,12 +2,15 @@ import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X, Sun, Moon } from "lucide-react";
 import { clsx } from "clsx";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
 import { getTheme, toggleTheme, type Theme } from "../theme";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [theme, setThemeState] = useState<Theme>("dark");
+  const [logged, setLogged] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,6 +36,9 @@ export default function Header() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // sessão: logado por Google OU por nº de conta (localStorage). Muda "Entrar" → "A minha conta".
+  useEffect(() => onAuthStateChanged(auth, (u) => setLogged(!!u?.email || !!localStorage.getItem("numeroConta"))), []);
 
   const closeMenu = () => setMobileOpen(false);
   const onToggleTheme = () => setThemeState(toggleTheme());
@@ -71,7 +77,7 @@ export default function Header() {
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <Link to="/conta" className="hidden lg:inline-flex items-center justify-center px-5 py-3 text-[11px] font-mono uppercase tracking-[0.2em] border border-line text-fg hover:border-accent/60 hover:text-accent transition-colors font-bold">
-              Entrar
+              {logged ? "A minha conta" : "Entrar"}
             </Link>
             <Link to="/aderir" className="hidden lg:inline-flex items-center justify-center px-6 py-3 text-[11px] font-mono uppercase tracking-[0.2em] bg-fg text-bg hover:bg-accent transition-colors font-bold">
               Pedir instalação
@@ -94,7 +100,7 @@ export default function Header() {
           <Link to="/contacto" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Contacto</Link>
           <div className="mt-8 grid grid-cols-2 gap-3">
             <Link to="/conta" onClick={closeMenu} className="flex items-center justify-center px-6 py-5 border border-line text-fg font-mono text-xs tracking-widest font-bold uppercase hover:border-accent/60 transition-colors">
-              Entrar
+              {logged ? "A minha conta" : "Entrar"}
             </Link>
             <Link to="/aderir" onClick={closeMenu} className="flex items-center justify-center px-6 py-5 bg-fg text-bg font-mono text-xs tracking-widest font-bold uppercase transition-colors">
               Pedir instalação

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../components/Layout";
 import { db, auth, googleProvider, storage } from "../firebase";
@@ -13,7 +13,7 @@ import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, MessageCircle, Check, Clock, X as XIcon,
   RefreshCcw, Ban, Copy, Link2, Users, UserCheck,
-  Wallet, Wifi, Megaphone, ArrowRight, TrendingUp,
+  Wallet, Wifi, Megaphone, ArrowRight, TrendingUp, ExternalLink,
 } from "lucide-react";
 
 /* ===========================================================================
@@ -224,27 +224,22 @@ export default function Conta() {
   const [first, second] = promotorPrimary ? [promotorSection, clienteSection] : [clienteSection, promotorSection];
 
   return (
-    <Layout>
-      <section className="pt-32 lg:pt-36 pb-28 min-h-screen">
-        {/* ===== FAIXA DE IDENTIDADE (largura ampla) ===== */}
+    <PortalShell identity={gEmail || conta || ""} onSair={sair}>
+      <section className="py-12 lg:py-16 min-h-screen">
+        {/* ===== FAIXA DE IDENTIDADE ===== */}
         <div className="border-b border-line pb-10 mb-12">
-          <div className="max-w-[1280px] mx-auto px-6 lg:px-12 flex items-end justify-between gap-6 flex-wrap">
-            <div>
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                {isCliente && <RoleBadge icon={Wifi} label="Cliente" />}
-                {isLead && <RoleBadge icon={Clock} label="Pedido" />}
-                {isPromotor && <RoleBadge icon={Megaphone} label="Promotor" accent />}
-              </div>
-              <h1 className="font-display text-4xl md:text-6xl xl:text-7xl text-fg tracking-tight leading-[0.95]">{nome || "A minha conta"}</h1>
-              <div className="text-muted text-sm mt-4">
-                {isCliente ? <>Conta <span className="font-mono text-fg">{conta}</span></>
-                  : isLead ? "Pedido de instalação em curso"
-                  : gEmail ? <span className="font-mono text-fg">{gEmail}</span> : "Visitante"}
-              </div>
+          <div className="max-w-[1280px] mx-auto px-6 lg:px-12">
+            <div className="flex items-center gap-2 mb-4 flex-wrap">
+              {isCliente && <RoleBadge icon={Wifi} label="Cliente" />}
+              {isLead && <RoleBadge icon={Clock} label="Pedido" />}
+              {isPromotor && <RoleBadge icon={Megaphone} label="Promotor" accent />}
             </div>
-            <button onClick={sair} className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg px-4 py-2.5 border border-line hover:border-accent/40 transition-colors">
-              <LogOut size={13} /> Sair
-            </button>
+            <h1 className="font-display text-4xl md:text-6xl xl:text-7xl text-fg tracking-tight leading-[0.95]">{nome || "A minha conta"}</h1>
+            <div className="text-muted text-sm mt-4">
+              {isCliente ? <>Conta <span className="font-mono text-fg">{conta}</span></>
+                : isLead ? "Pedido de instalação em curso"
+                : gEmail ? <span className="font-mono text-fg">{gEmail}</span> : "Visitante"}
+            </div>
           </div>
         </div>
 
@@ -256,7 +251,32 @@ export default function Conta() {
       </section>
 
       {toast && <Toast msg={toast} />}
-    </Layout>
+    </PortalShell>
+  );
+}
+
+/* shell de PAINEL — substitui o site público quando há sessão (como o /admin):
+   sem nav pública nem footer, sem botão "Entrar"; barra própria com Sair. */
+function PortalShell({ identity, onSair, children }: { identity: string; onSair: () => void; children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-bg text-fg flex flex-col font-body relative">
+      <div className="noise-bg" />
+      <header className="sticky top-0 z-50 bg-bg/90 backdrop-blur-xl border-b border-line">
+        <div className="max-w-[1280px] mx-auto px-6 lg:px-12">
+          <div className="flex items-center justify-between h-16 gap-4">
+            <Link to="/" className="flex items-center gap-3 font-display font-bold text-xl text-fg">
+              <img src="/logo-intime.png" alt="Intime" className="logo-img w-8 h-8" draggable={false} /> <span>Portal</span>
+            </Link>
+            <div className="flex items-center gap-5">
+              <a href="/" className="hidden sm:flex items-center gap-2 text-xs text-muted hover:text-fg transition-colors"><ExternalLink size={14} /> Ver o site</a>
+              {identity && <span className="hidden md:block text-xs text-faint truncate max-w-[220px]">{identity}</span>}
+              <button onClick={onSair} className="flex items-center gap-2 text-xs text-muted hover:text-accent transition-colors"><LogOut size={16} /> <span className="hidden sm:inline">Sair</span></button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main className="flex-1 relative z-10">{children}</main>
+    </div>
   );
 }
 
