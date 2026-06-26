@@ -1,14 +1,15 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import { db, auth, googleProvider } from "../firebase";
 import Layout from "../components/Layout";
 import LocationFields from "../components/LocationFields";
 import { useSiteConfig } from "../useSiteConfig";
 import { getRef } from "../referral";
 import { clsx } from "clsx";
-import { Check, CheckCircle2, MessageCircle, ChevronLeft, ArrowRight, Repeat } from "lucide-react";
+import { Check, CheckCircle2, MessageCircle, ChevronLeft, ArrowRight, Repeat, User as UserIcon } from "lucide-react";
 
 const field = "w-full bg-bg border border-line px-4 py-4 text-base text-fg outline-none focus:border-accent transition-colors";
 const lbl = "block text-[11px] font-mono uppercase tracking-[0.15em] text-faint mb-2";
@@ -27,6 +28,22 @@ export default function Aderir() {
   const [aceite, setAceite] = useState(false);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
+  const [user, setUser] = useState<{ email: string; uid: string; name: string } | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+
+  // Sessão Google: cria/identifica a conta e liga o pedido à pessoa (capta o email).
+  useEffect(() => onAuthStateChanged(auth, (u) => {
+    if (u?.email) {
+      setUser({ email: u.email, uid: u.uid, name: u.displayName || "" });
+      setForm((f) => (f.nome.trim() ? f : { ...f, nome: u.displayName || f.nome }));
+    } else setUser(null);
+  }), []);
+
+  const entrarGoogle = async () => {
+    setAuthBusy(true);
+    try { await signInWithPopup(auth, googleProvider); } catch { /* cancelado */ }
+    finally { setAuthBusy(false); }
+  };
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const plan = cfg.plans.find((p) => p.id === planId);
@@ -46,12 +63,13 @@ export default function Aderir() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!aceite) return;
+    if (!aceite || !user) return;
     setSending(true);
     try {
       const promotor = getRef();
       await addDoc(collection(db, "inscricoes"), {
         ...form, plano: planName, planoId: planId, status: "novo",
+        email: user.email.toLowerCase(), uid: user.uid,
         ...(promotor ? { promotor } : {}),
         createdAt: serverTimestamp(),
       });
@@ -198,6 +216,22 @@ export default function Aderir() {
                       <div className="flex justify-between gap-4"><span className="text-faint">Espaço · Horário</span><span className="text-fg text-right">{form.tipo} · {form.horario}</span></div>
                     </div>
 
+                    {/* Conta: autenticar com Google cria a conta e liga o pedido à pessoa (capta o email) */}
+                    {user ? (
+                      <div className="flex items-start gap-3 border border-line bg-card p-4 mb-5 text-sm">
+                        <Check size={16} className="text-accent shrink-0 mt-0.5" />
+                        <span className="text-muted">Pedido ligado à conta <b className="text-fg">{user.email}</b>. Vai poder acompanhar o estado em <b className="text-fg">“Entrar”</b>.</span>
+                      </div>
+                    ) : (
+                      <div className="border border-line bg-card p-5 mb-5">
+                        <p className="text-sm text-muted mb-4">Entre com Google para criar a sua conta e acompanhar o estado do pedido. Usamos o seu email só para isto.</p>
+                        <button type="button" onClick={entrarGoogle} disabled={authBusy}
+                          className="inline-flex items-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
+                          <UserIcon size={15} /> {authBusy ? "A entrar…" : "Entrar com Google"}
+                        </button>
+                      </div>
+                    )}
+
                     <label className="flex items-start gap-3 text-sm text-muted cursor-pointer mb-2">
                       <input type="checkbox" checked={aceite} onChange={(e) => setAceite(e.target.checked)} className="mt-1 accent-[var(--accent)]" />
                       <span>Autorizo a Intime a contactar-me para confirmar disponibilidade, condições de instalação e adesão ao serviço. Os meus dados não serão usados para outros fins sem autorização.</span>
@@ -222,7 +256,7 @@ export default function Aderir() {
                 Continuar <ArrowRight size={16} />
               </button>
             ) : (
-              <button type="submit" disabled={!aceite || sending}
+              <button type="submit" disabled={!aceite || !user || sending}
                 className="inline-flex items-center gap-2 px-8 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 {sending ? "A enviar..." : "Enviar pedido"}
               </button>

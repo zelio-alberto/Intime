@@ -6,7 +6,6 @@ import Sobre from './pages/Sobre';
 import Contacto from './pages/Contacto';
 import Aderir from './pages/Aderir';
 import Conta from './pages/Conta';
-import Promotor from './pages/Promotor';
 import PromotorLink from './pages/PromotorLink';
 import SejaPromotor from './pages/SejaPromotor';
 
@@ -36,7 +35,7 @@ export default function App() {
         <Route path="/contacto" element={<Contacto />} />
         <Route path="/aderir" element={<Aderir />} />
         <Route path="/conta" element={<Conta />} />
-        <Route path="/promotor" element={<Promotor />} />
+        <Route path="/promotor" element={<Conta />} />
         <Route path="/seja-promotor" element={<SejaPromotor />} />
         <Route path="/p/:codigo" element={<PromotorLink />} />
 

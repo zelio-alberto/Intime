@@ -1,18 +1,29 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import Layout from "../components/Layout";
 import { db, auth, googleProvider, storage } from "../firebase";
 import {
-  doc, getDoc, setDoc, addDoc, collection, onSnapshot,
-  query, where, orderBy, serverTimestamp, Timestamp,
+  doc, getDoc, getDocs, setDoc, addDoc, collection, onSnapshot,
+  query, where, orderBy, limit, serverTimestamp, Timestamp,
   type DocumentData,
 } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, MessageCircle, Check, Clock, X as XIcon,
-  RefreshCcw, Ban, User as UserIcon,
+  RefreshCcw, Ban, User as UserIcon, Copy, Link2, Users, UserCheck,
+  Wallet, Wifi, Megaphone, ArrowRight,
 } from "lucide-react";
+
+/* ===========================================================================
+   PÁGINA ÚNICA "A MINHA CONTA"
+   Junta, na mesma página e de forma adaptativa:
+     • Cliente   (portalContas)   — login nº conta+4díg OU Google
+     • Lead      (inscricoes)     — pediu instalação, ainda sem Starlink
+     • Promotor  (promotores)     — login Google
+   O email Google é o elo que liga os papéis. O admin (/admin) NÃO entra aqui.
+   =========================================================================== */
 
 /* ---------- helpers (espelham models/account.dart) ---------- */
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -42,51 +53,169 @@ function fmtTs(ts: unknown) {
   }
   return "";
 }
+function fmtData(ts: unknown) {
+  if (ts instanceof Timestamp) {
+    const d = ts.toDate();
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  }
+  return "";
+}
+function estadoStr(d: DocumentData) { return String(d.estado ?? ""); }
 
 const METODOS = ["M-Pesa", "e-Mola", "Conta bancária", "Outro"];
+const PROMO_STATUS_LABEL: Record<string, string> = { novo: "Novo", contactado: "Contactado", concluido: "Cliente" };
 
 /* ---------- estilos partilhados (mesmas classes do site) ---------- */
 const field = "w-full bg-bg border border-line px-4 py-3.5 text-sm text-fg outline-none focus:border-accent transition-colors";
 const lbl = "block text-[11px] font-mono uppercase tracking-[0.15em] text-faint mb-2";
-const btnPrimary = "w-full py-4 bg-fg text-bg font-mono text-xs uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50";
+const btnPrimary = "w-full py-4 bg-fg text-bg font-mono text-xs uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50 flex items-center justify-center gap-2";
 const btnGhost = "w-full py-3.5 border border-line text-fg font-mono text-xs uppercase tracking-[0.2em] font-bold hover:border-accent/50 hover:bg-card/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2";
 const cardCls = "border border-line p-6 md:p-8 bg-card/30";
+const sectionLbl = "font-mono text-accent text-[10px] uppercase tracking-[0.25em] mb-4 flex items-center gap-2";
 
+/* ===================== ORQUESTRADOR ===================== */
 export default function Conta() {
   const cfg = useSiteConfig();
-  const [conta, setConta] = useState<string | null>(() => localStorage.getItem("numeroConta"));
+
+  // sessões: nº de conta (cliente, localStorage) e/ou Google (elo de papéis)
+  const [manualConta, setManualConta] = useState<string | null>(() => localStorage.getItem("numeroConta"));
+  const [gEmail, setGEmail] = useState<string | null>(null);
+  const [gName, setGName] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
+
+  // dados resolvidos
+  const [conta, setConta] = useState<string | null>(manualConta);
   const [dados, setDados] = useState<DocumentData>({});
+  const [contaExiste, setContaExiste] = useState(false);
   const [hist, setHist] = useState<{ id: string; d: DocumentData }[]>([]);
   const [histLoading, setHistLoading] = useState(true);
-  const [toast, setToast] = useState("");
+  const [promo, setPromo] = useState<DocumentData | null>(null);
+  const [codigo, setCodigo] = useState<string | null>(null);
+  const [lead, setLead] = useState<DocumentData | null>(null);
 
+  const [toast, setToast] = useState("");
   const showToast = useCallback((m: string) => {
     setToast(m);
     window.setTimeout(() => setToast(""), 3400);
   }, []);
 
-  /* --- subscrições à conta + histórico --- */
+  /* sessão Google partilhada (deteta todos os papéis pelo email) */
+  useEffect(() => onAuthStateChanged(auth, (u) => {
+    setGEmail(u?.email ?? null);
+    setGName(u?.displayName ?? null);
+    setAuthReady(true);
+  }), []);
+
+  /* resolver o nº de conta do cliente: manual OU via portalEmails (Google) */
   useEffect(() => {
-    if (!conta) return;
-    const unsubC = onSnapshot(doc(db, "portalContas", conta), (snap) => setDados(snap.data() || {}), () => {});
+    let active = true;
+    if (manualConta) { setConta(manualConta); return; }
+    if (!gEmail) { setConta(null); return; }
+    getDoc(doc(db, "portalEmails", gEmail.toLowerCase()))
+      .then((s) => { if (active) setConta(s.exists() ? String(s.data().numeroConta || "") || null : null); })
+      .catch(() => { if (active) setConta(null); });
+    return () => { active = false; };
+  }, [manualConta, gEmail]);
+
+  /* subscrição à conta + histórico de pagamentos */
+  useEffect(() => {
+    if (!conta) { setDados({}); setContaExiste(false); setHist([]); setHistLoading(false); return; }
+    setHistLoading(true);
+    const unsubC = onSnapshot(doc(db, "portalContas", conta), (snap) => { setContaExiste(snap.exists()); setDados(snap.data() || {}); }, () => {});
     const q = query(collection(db, "pagamentos"), where("numeroConta", "==", conta), orderBy("data", "desc"));
     const unsubH = onSnapshot(q,
       (snap) => { setHist(snap.docs.map((d) => ({ id: d.id, d: d.data() }))); setHistLoading(false); },
-      () => { setHistLoading(false); }
-    );
+      () => { setHistLoading(false); });
     return () => { unsubC(); unsubH(); };
   }, [conta]);
 
-  const entrar = (c: string) => { localStorage.setItem("numeroConta", c); setConta(c); };
-  const sair = () => { localStorage.removeItem("numeroConta"); setConta(null); setDados({}); setHist([]); };
+  /* promotor pelo email Google */
+  useEffect(() => {
+    let active = true;
+    if (!gEmail) { setPromo(null); setCodigo(null); return; }
+    (async () => {
+      const idx = await getDoc(doc(db, "promotorEmails", gEmail.toLowerCase()));
+      const cod = idx.exists() ? String(idx.data().codigo || "") : "";
+      if (!cod) { if (active) { setPromo(null); setCodigo(null); } return; }
+      const snap = await getDoc(doc(db, "promotores", cod));
+      if (active && snap.exists()) { setCodigo(cod); setPromo({ codigo: cod, ...snap.data() }); }
+    })().catch(() => {});
+    return () => { active = false; };
+  }, [gEmail]);
+
+  /* lead (pedido de instalação) pelo email Google — só se ainda não é cliente */
+  useEffect(() => {
+    let active = true;
+    if (!gEmail || contaExiste) { setLead(null); return; }
+    (async () => {
+      try {
+        const q = query(collection(db, "inscricoes"), where("email", "==", gEmail.toLowerCase()), orderBy("createdAt", "desc"), limit(1));
+        const snap = await getDocs(q);
+        if (active) setLead(snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() });
+      } catch { if (active) setLead(null); }
+    })();
+    return () => { active = false; };
+  }, [gEmail, contaExiste]);
+
+  const entrarConta = (c: string) => { localStorage.setItem("numeroConta", c); setManualConta(c); };
+  const entrarGoogle = async () => { await signInWithPopup(auth, googleProvider); };
+  const sair = () => {
+    localStorage.removeItem("numeroConta");
+    setManualConta(null); setConta(null); setDados({}); setContaExiste(false);
+    setHist([]); setPromo(null); setCodigo(null); setLead(null);
+    signOut(auth).catch(() => {});
+  };
+
+  const hasSession = !!conta || !!gEmail;
+  const isCliente = contaExiste;
+  const isLead = !!lead && !isCliente;
+  const isPromotor = !!promo && !!codigo;
+  const nome = String(dados.nome || promo?.nome || gName || "");
 
   return (
     <Layout>
       <section className="pt-40 pb-24 min-h-screen">
-        <div className="max-w-[760px] mx-auto px-6 lg:px-12">
-          {conta
-            ? <Portal conta={conta} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} onLogout={sair} showToast={showToast} />
-            : <Login onLogin={entrar} />}
+        <div className="max-w-[820px] mx-auto px-6 lg:px-12">
+          {!authReady && !manualConta
+            ? <p className="text-muted text-sm">A carregar…</p>
+            : !hasSession
+              ? <Login onEntrarConta={entrarConta} onEntrarGoogle={entrarGoogle} />
+              : (
+                <>
+                  {/* identidade + sair (um só, partilhado) */}
+                  <div className="flex items-center justify-between gap-4 flex-wrap mb-10">
+                    <div>
+                      <div className="font-display text-2xl text-fg">{nome || "A minha conta"}</div>
+                      <div className="text-muted text-sm">
+                        {isCliente ? <>Conta <span className="font-mono text-fg">{conta}</span></>
+                          : isLead ? "Pedido de instalação"
+                          : gEmail ? <span className="font-mono text-fg">{gEmail}</span> : "Visitante"}
+                      </div>
+                    </div>
+                    <button onClick={sair} className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg px-3 py-1.5 border border-line transition-colors">
+                      <LogOut size={13} /> Sair
+                    </button>
+                  </div>
+
+                  {/* ===== ÁREA DE CLIENTE ===== */}
+                  <div className="mb-14">
+                    <div className={sectionLbl}><Wifi size={13} /> A minha Starlink</div>
+                    {isCliente
+                      ? <ClientePortal conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />
+                      : isLead
+                        ? <LeadStatus lead={lead!} />
+                        : <CtaCliente />}
+                  </div>
+
+                  {/* ===== ÁREA DE PROMOTOR ===== */}
+                  <div>
+                    <div className={sectionLbl}><Megaphone size={13} /> Promotor</div>
+                    {isPromotor
+                      ? <PromotorPainel codigo={codigo!} promo={promo!} />
+                      : <TeaserPromotor temGoogle={!!gEmail} />}
+                  </div>
+                </>
+              )}
         </div>
       </section>
 
@@ -100,7 +229,7 @@ export default function Conta() {
 }
 
 /* ===================== LOGIN ===================== */
-function Login({ onLogin }: { onLogin: (c: string) => void }) {
+function Login({ onEntrarConta, onEntrarGoogle }: { onEntrarConta: (c: string) => void; onEntrarGoogle: () => Promise<void> }) {
   const [conta, setConta] = useState("");
   const [last4, setLast4] = useState("");
   const [busy, setBusy] = useState(false);
@@ -115,39 +244,41 @@ function Login({ onLogin }: { onLogin: (c: string) => void }) {
       if (!snap.exists()) { setErro("Conta não encontrada. Verifique o número."); return; }
       const reg = String(snap.data().whatsappLast4 ?? "");
       if (reg && last4.trim() !== reg) { setErro("Os 4 dígitos do WhatsApp não conferem."); return; }
-      onLogin(c);
+      onEntrarConta(c);
     } catch { setErro("Erro ao entrar. Tente de novo."); }
     finally { setBusy(false); }
   };
 
   const entrarGoogle = async () => {
     setBusy(true); setErro("");
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      const email = (res.user.email || "").toLowerCase();
-      const idx = await getDoc(doc(db, "portalEmails", email));
-      const c = String(idx.exists() ? (idx.data().numeroConta ?? "") : "");
-      if (!c) { setErro("Nenhuma conta Intime para este email. Use o nº de conta."); return; }
-      onLogin(c);
-    } catch { setErro("Login Google indisponível. Use o nº de conta."); }
+    try { await onEntrarGoogle(); }
+    catch { setErro("Login Google indisponível. Use o nº de conta."); }
     finally { setBusy(false); }
   };
 
   return (
     <>
       <div className="mb-10">
-        <span className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-5 block">Portal do cliente</span>
-        <h1 className="text-4xl md:text-6xl font-display font-medium text-fg tracking-tighter mb-4">A minha conta.</h1>
+        <span className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-5 block">Portal Intime</span>
+        <h1 className="text-4xl md:text-6xl font-display font-medium text-fg tracking-tighter mb-4">Entrar.</h1>
         <p className="text-lg text-muted font-light border-l border-line pl-6">
-          Aceda com o número de conta que recebeu da Intime para ver os detalhes e pagar a sua mensalidade.
+          Cliente, promotor ou a pedir instalação — entre aqui. Com o Google reconhecemos automaticamente a sua conta.
         </p>
       </div>
 
       <div className={cardCls}>
-        <div className="mb-5">
+        {/* Google primeiro: é o que liga cliente + promotor + pedidos */}
+        <button className={btnPrimary} disabled={busy} onClick={entrarGoogle}>
+          <UserIcon size={15} /> {busy ? "A entrar…" : "Entrar com Google"}
+        </button>
+
+        <div className="flex items-center gap-4 my-6 text-faint text-xs">
+          <span className="flex-1 h-px bg-line" /> ou com nº de conta <span className="flex-1 h-px bg-line" />
+        </div>
+
+        <div className="mb-4">
           <label className={lbl}>Número de conta</label>
-          <input className={field} placeholder="IN-0000" spellCheck={false} value={conta}
-            onChange={(e) => setConta(e.target.value)} />
+          <input className={field} placeholder="IN-0000" spellCheck={false} value={conta} onChange={(e) => setConta(e.target.value)} />
         </div>
         <div className="mb-3">
           <label className={lbl}>Últimos 4 dígitos do WhatsApp</label>
@@ -156,29 +287,20 @@ function Login({ onLogin }: { onLogin: (c: string) => void }) {
             onKeyDown={(e) => { if (e.key === "Enter") entrarConta(); }} />
         </div>
         {erro && <p className="text-[#ff6b6b] text-sm mb-3">{erro}</p>}
-        <button className={btnPrimary} disabled={busy} onClick={entrarConta}>
-          {busy ? "A entrar…" : "Entrar"}
-        </button>
+        <button className={btnGhost} disabled={busy} onClick={entrarConta}>{busy ? "A entrar…" : "Entrar com nº de conta"}</button>
 
-        <div className="flex items-center gap-4 my-6 text-faint text-xs">
-          <span className="flex-1 h-px bg-line" /> ou <span className="flex-1 h-px bg-line" />
-        </div>
-        <button className={btnGhost} disabled={busy} onClick={entrarGoogle}>
-          <UserIcon size={15} /> Entrar com Google
-        </button>
         <p className="text-center text-muted text-sm mt-6">
-          Não sabe o número da conta? <a href="/contacto" className="underline hover:text-fg">Fale com a equipa</a>.
+          Ainda não é cliente? <Link to="/aderir" className="underline hover:text-fg">Pedir instalação</Link>.
         </p>
       </div>
     </>
   );
 }
 
-/* ===================== PORTAL ===================== */
-function Portal({ conta, dados, hist, histLoading, cfg, onLogout, showToast }: {
+/* ===================== CLIENTE: PORTAL ===================== */
+function ClientePortal({ conta, dados, hist, histLoading, cfg, showToast }: {
   conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[];
-  histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>;
-  onLogout: () => void; showToast: (m: string) => void;
+  histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
 }) {
   const [tab, setTab] = useState<"conta" | "pagar">("conta");
   const estado = String(dados.estado ?? "—");
@@ -188,22 +310,12 @@ function Portal({ conta, dados, hist, histLoading, cfg, onLogout, showToast }: {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
-        <div>
-          <div className="font-display text-2xl text-fg">{dados.nome || "Cliente Intime"}</div>
-          <div className="text-muted text-sm">Conta <span className="font-mono text-fg">{conta}</span></div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className={`text-[11px] font-mono uppercase tracking-widest px-3 py-1.5 border ${pillCls}`}>{estado}</span>
-          <button onClick={onLogout} className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg px-3 py-1.5 border border-line transition-colors">
-            <LogOut size={13} /> Sair
-          </button>
-        </div>
+      <div className="flex items-center justify-end mb-4">
+        <span className={`text-[11px] font-mono uppercase tracking-widest px-3 py-1.5 border ${pillCls}`}>{estado}</span>
       </div>
 
-      {/* tabs */}
       <div className="flex gap-2 mb-8 border-b border-line">
-        {([["conta", "Minha conta"], ["pagar", "Pagamentos"]] as const).map(([k, label]) => (
+        {([["conta", "Subscrição"], ["pagar", "Pagamentos"]] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-5 py-3 text-[11px] font-mono uppercase tracking-[0.15em] border-b-2 -mb-px transition-colors ${tab === k ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}>
             {label}
@@ -218,7 +330,7 @@ function Portal({ conta, dados, hist, histLoading, cfg, onLogout, showToast }: {
   );
 }
 
-/* ---------- TAB: MINHA CONTA ---------- */
+/* ---------- TAB: SUBSCRIÇÃO ---------- */
 function TabConta({ conta, dados, cfg, showToast }: {
   conta: string; dados: DocumentData; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
 }) {
@@ -365,14 +477,12 @@ function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
 
   return (
     <div className="space-y-6">
-      {/* valor */}
       <div className={cardCls + " bg-card/50"}>
         <div className="text-faint text-[11px] font-mono uppercase tracking-widest">Valor a pagar este mês</div>
         <div className="font-display text-5xl text-fg mt-1">{dados.mensalidade ?? "—"} <span className="text-xl text-muted">MT</span></div>
         {atraso && <p className="text-[#ff6b6b] text-sm mt-3">⚠ Conta em atraso — regularize assim que possível.</p>}
       </div>
 
-      {/* como pagar */}
       <div className={cardCls}>
         <h3 className="font-display text-xl text-fg mb-4">Como pagar</h3>
         <div className="flex flex-wrap gap-2 mb-5">
@@ -413,7 +523,6 @@ function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
         </p>
       </div>
 
-      {/* histórico */}
       <div className={cardCls}>
         <h3 className="font-display text-xl text-fg mb-4">Histórico de pagamentos</h3>
         {histLoading ? (
@@ -449,4 +558,169 @@ function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
   );
 }
 
-function estadoStr(d: DocumentData) { return String(d.estado ?? ""); }
+/* ===================== LEAD: ESTADO DO PEDIDO ===================== */
+function LeadStatus({ lead }: { lead: DocumentData }) {
+  const status = String(lead.status || "novo");
+  const order: Record<string, number> = { novo: 0, contactado: 1, concluido: 2 };
+  const cur = order[status] ?? 0;
+  const passos = [
+    { label: "Pedido recebido", desc: "Recebemos o seu pedido de instalação." },
+    { label: "Em avaliação", desc: "A equipa entra em contacto para confirmar e agendar." },
+    { label: "Instalação concluída", desc: "A sua Starlink fica ativa e a conta abre aqui." },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className={cardCls}>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-1">
+          <h3 className="font-display text-xl text-fg">O seu pedido de instalação</h3>
+          <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-accent/40 text-accent bg-accent/10">Em curso</span>
+        </div>
+        <p className="text-muted text-sm mb-6">{[lead.plano, lead.cidade].filter(Boolean).join(" · ") || "—"}{lead.createdAt ? ` · ${fmtData(lead.createdAt)}` : ""}</p>
+
+        <div className="space-y-5">
+          {passos.map((p, i) => {
+            const feito = i <= cur;
+            return (
+              <div key={i} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className={`w-7 h-7 grid place-items-center rounded-full border ${feito ? "bg-accent text-bg border-accent" : "border-line text-faint"}`}>
+                    {feito ? <Check size={14} /> : <span className="text-[11px] font-mono">{i + 1}</span>}
+                  </div>
+                  {i < passos.length - 1 && <div className={`w-px flex-1 my-1 ${i < cur ? "bg-accent" : "bg-line"}`} style={{ minHeight: 22 }} />}
+                </div>
+                <div className="pb-1">
+                  <div className={`font-medium ${feito ? "text-fg" : "text-muted"}`}>{p.label}</div>
+                  <div className="text-faint text-xs mt-0.5">{p.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="text-faint text-xs text-center">Assim que a Starlink for instalada, esta área passa a mostrar a sua conta, pagamentos e faturas.</p>
+    </div>
+  );
+}
+
+/* ===================== CTA: TORNAR-SE CLIENTE ===================== */
+function CtaCliente() {
+  return (
+    <div className={cardCls + " text-center"}>
+      <Wifi size={26} className="mx-auto mb-4 text-accent" />
+      <h3 className="font-display text-2xl text-fg mb-2">Ainda não tem Starlink connosco?</h3>
+      <p className="text-muted text-sm mb-6 max-w-md mx-auto">Peça a instalação e acompanhe aqui o estado do seu pedido até ficar online.</p>
+      <Link to="/aderir" className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors">
+        Pedir instalação <ArrowRight size={15} />
+      </Link>
+    </div>
+  );
+}
+
+/* ===================== PROMOTOR: PAINEL ===================== */
+function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData }) {
+  const [copied, setCopied] = useState(false);
+  const pct = Number(promo.percentagem) || 8;
+  const stats = promo.stats || {};
+  const leads: DocumentData[] = Array.isArray(promo.leadsResumo) ? promo.leadsResumo : [];
+  const clientes: DocumentData[] = Array.isArray(promo.clientesResumo) ? promo.clientesResumo : [];
+  const nLeads = Number(stats.leads ?? leads.length) || 0;
+  const nClientes = Number(stats.clientes ?? clientes.length) || 0;
+  const comissao = Number(stats.comissao) || 0;
+  const semDados = !promo.statsAtualizadoEm && leads.length === 0;
+
+  const link = `${window.location.origin}/p/${codigo}`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
+  };
+
+  return (
+    <>
+      <div className="mb-6 text-muted text-sm">Código <span className="font-mono text-fg">{codigo}</span> · {pct}% por pagamento</div>
+
+      <div className={cardCls + " mb-6"}>
+        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint mb-3"><Link2 size={14} /> O meu link</div>
+        <div className="flex flex-wrap items-center gap-3">
+          <code className="flex-1 min-w-0 break-all text-fg text-sm">{link}</code>
+          <button onClick={copy} className="inline-flex items-center gap-2 px-4 py-2.5 bg-fg text-bg font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-accent transition-colors">
+            {copied ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
+          </button>
+        </div>
+        <p className="text-faint text-xs mt-3">Partilhe este link. Quem aderir por ele fica associado a si.</p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {[
+          { icon: Users, n: nLeads, l: "Leads" },
+          { icon: UserCheck, n: nClientes, l: "Clientes" },
+          { icon: Wallet, n: `${comissao} MT`, l: "Comissão", accent: true },
+        ].map((s, i) => (
+          <div key={i} className={cardCls + " text-center"}>
+            <s.icon size={18} className="mx-auto mb-2 text-faint" />
+            <div className={`font-display text-3xl ${s.accent ? "text-accent" : "text-fg"}`}>{s.n}</div>
+            <div className="text-[10px] font-mono uppercase text-faint mt-1">{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      {semDados && (
+        <div className={cardCls + " mb-6"}>
+          <p className="text-muted text-sm">Ainda não há resultados. Partilhe o seu link — assim que alguém aderir por ele, aparece aqui.</p>
+        </div>
+      )}
+
+      <div className={cardCls + " mb-6"}>
+        <h3 className="font-display text-xl text-fg mb-4">Os meus clientes</h3>
+        {clientes.length === 0
+          ? <p className="text-muted text-sm">Ainda não há clientes confirmados. Assim que um lead seu virar cliente, aparece aqui.</p>
+          : <div>{clientes.map((c, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-line/60 last:border-0">
+                <div><div className="text-fg font-medium">{c.nome || "—"}</div><div className="text-faint text-xs">{c.pacote || "—"}</div></div>
+                <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-muted">{c.estado || "—"}</span>
+              </div>
+            ))}</div>}
+      </div>
+
+      <div className={cardCls}>
+        <h3 className="font-display text-xl text-fg mb-4">Pedidos que trouxe</h3>
+        {leads.length === 0
+          ? <p className="text-muted text-sm">Ainda sem pedidos. Partilhe o seu link para começar.</p>
+          : <div>{leads.map((l, i) => {
+              const st = String(l.status || "novo");
+              return (
+                <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-line/60 last:border-0">
+                  <div>
+                    <div className="text-fg font-medium">{l.nome || "—"}</div>
+                    <div className="text-faint text-xs">{[l.plano, l.cidade].filter(Boolean).join(" · ") || "—"} · {fmtData(l.data)}</div>
+                  </div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-muted">{PROMO_STATUS_LABEL[st] || st}</span>
+                </div>
+              );
+            })}</div>}
+      </div>
+    </>
+  );
+}
+
+/* ===================== PROMOTOR: CONVITE (não é promotor) ===================== */
+function TeaserPromotor({ temGoogle }: { temGoogle: boolean }) {
+  return (
+    <div className={cardCls}>
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 grid place-items-center border border-line text-accent shrink-0"><Wallet size={18} /></div>
+        <div>
+          <h3 className="font-display text-xl text-fg mb-1">Ganhe comissões com a Intime</h3>
+          <p className="text-muted text-sm mb-4">
+            Como promotor, ganha uma percentagem por cada pagamento dos clientes que trouxer — de forma recorrente. Ser promotor é por convite da equipa.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Link to="/contacto" className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">
+              <MessageCircle size={14} /> Quero ser promotor
+            </Link>
+            {!temGoogle && <span className="text-faint text-xs self-center">Já é promotor? Entre com Google.</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
