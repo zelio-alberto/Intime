@@ -13,7 +13,7 @@ import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, MessageCircle, Check, Clock, X as XIcon,
   RefreshCcw, Ban, Copy, Link2, Users, UserCheck,
-  Wallet, Wifi, Megaphone, ArrowRight,
+  Wallet, Wifi, Megaphone, ArrowRight, TrendingUp,
 } from "lucide-react";
 
 /* ===========================================================================
@@ -740,80 +740,94 @@ function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData
   const nLeads = Number(stats.leads ?? leads.length) || 0;
   const nClientes = Number(stats.clientes ?? clientes.length) || 0;
   const comissao = Number(stats.comissao) || 0;
-  const semDados = !promo.statsAtualizadoEm && leads.length === 0;
-
   const link = `${window.location.origin}/p/${codigo}`;
   const copy = async () => {
     try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
   };
 
+  const kpis = [
+    { icon: Users, value: nLeads, label: "Leads trazidos" },
+    { icon: UserCheck, value: nClientes, label: "Clientes ativos" },
+    { icon: Wallet, value: `${comissao} MT`, label: "Comissão acumulada", accent: true },
+    { icon: TrendingUp, value: `${pct}%`, label: "Por pagamento" },
+  ];
+
   return (
-    <>
-      <div className="mb-6 text-muted text-sm">Código <span className="font-mono text-fg">{codigo}</span> · {pct}% por pagamento</div>
-
-      <div className={cardCls + " mb-6"}>
-        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint mb-3"><Link2 size={14} /> O meu link</div>
-        <div className="flex flex-wrap items-center gap-3">
-          <code className="flex-1 min-w-0 break-all text-fg text-sm">{link}</code>
-          <button onClick={copy} className="inline-flex items-center gap-2 px-4 py-2.5 bg-fg text-bg font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-accent transition-colors">
-            {copied ? <><Check size={13} /> Copiado</> : <><Copy size={13} /> Copiar</>}
-          </button>
-        </div>
-        <p className="text-faint text-xs mt-3">Partilhe este link. Quem aderir por ele fica associado a si.</p>
-      </div>
-
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        {[
-          { icon: Users, n: nLeads, l: "Leads" },
-          { icon: UserCheck, n: nClientes, l: "Clientes" },
-          { icon: Wallet, n: `${comissao} MT`, l: "Comissão", accent: true },
-        ].map((s, i) => (
-          <div key={i} className={cardCls + " text-center"}>
-            <s.icon size={20} className="mx-auto mb-3 text-faint" />
-            <div className={`font-display text-4xl md:text-5xl ${s.accent ? "text-accent" : "text-fg"}`}>{s.n}</div>
-            <div className="text-[10px] font-mono uppercase tracking-widest text-faint mt-2">{s.l}</div>
+    <div className="space-y-6">
+      {/* ---- KPIs (estilo painel) ---- */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((s, i) => (
+          <div key={i} className={`border p-6 ${s.accent ? "border-accent bg-accent/[0.06]" : "border-line bg-card"}`}>
+            <s.icon size={20} className={`mb-4 ${s.accent ? "text-accent" : "text-faint"}`} />
+            <div className={`font-display text-4xl leading-none mb-1 ${s.accent ? "text-accent" : "text-fg"}`}>{s.value}</div>
+            <div className="text-[12.5px] text-muted">{s.label}</div>
           </div>
         ))}
       </div>
 
-      {semDados && (
-        <div className={cardCls + " mb-6"}>
-          <p className="text-muted text-sm">Ainda não há resultados. Partilhe o seu link — assim que alguém aderir por ele, aparece aqui.</p>
+      {/* ---- Link em destaque (ferramenta principal do promotor) ---- */}
+      <div className="border border-line bg-card p-6 md:p-8">
+        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint mb-4">
+          <Link2 size={14} /> O meu link de promotor · código <span className="text-fg">{codigo}</span>
         </div>
-      )}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <code className="flex-1 min-w-0 break-all bg-bg border border-line px-4 py-3.5 text-fg text-sm">{link}</code>
+          <button onClick={copy} className="shrink-0 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-widest font-bold hover:bg-accent transition-colors">
+            {copied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+          </button>
+        </div>
+        <p className="text-faint text-xs mt-3">Partilhe este link. Quem aderir por ele fica associado a si e gera-lhe {pct}% de comissão recorrente enquanto for cliente.</p>
+      </div>
 
+      {/* ---- Painéis lado a lado ---- */}
       <div className="grid lg:grid-cols-2 gap-6 items-start">
-      <div className={cardCls}>
-        <h3 className="font-display text-xl text-fg mb-4">Os meus clientes</h3>
-        {clientes.length === 0
-          ? <p className="text-muted text-sm">Ainda não há clientes confirmados. Assim que um lead seu virar cliente, aparece aqui.</p>
-          : <div>{clientes.map((c, i) => (
-              <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-line/60 last:border-0">
-                <div><div className="text-fg font-medium">{c.nome || "—"}</div><div className="text-faint text-xs">{c.pacote || "—"}</div></div>
-                <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-muted">{c.estado || "—"}</span>
-              </div>
-            ))}</div>}
-      </div>
-
-      <div className={cardCls}>
-        <h3 className="font-display text-xl text-fg mb-4">Pedidos que trouxe</h3>
-        {leads.length === 0
-          ? <p className="text-muted text-sm">Ainda sem pedidos. Partilhe o seu link para começar.</p>
-          : <div>{leads.map((l, i) => {
-              const st = String(l.status || "novo");
-              return (
-                <div key={i} className="flex items-center justify-between gap-4 py-3 border-b border-line/60 last:border-0">
-                  <div>
-                    <div className="text-fg font-medium">{l.nome || "—"}</div>
-                    <div className="text-faint text-xs">{[l.plano, l.cidade].filter(Boolean).join(" · ") || "—"} · {fmtData(l.data)}</div>
-                  </div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-muted">{PROMO_STATUS_LABEL[st] || st}</span>
+        {/* Clientes */}
+        <div className="border border-line bg-card">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+            <h2 className="font-display text-lg flex items-center gap-2"><UserCheck size={16} className="text-accent" /> Os meus clientes</h2>
+            <span className="font-mono text-[11px] text-faint">{clientes.length}</span>
+          </div>
+          {clientes.length === 0 ? (
+            <p className="text-faint text-sm px-6 py-12 text-center">Assim que um lead seu virar cliente, aparece aqui.</p>
+          ) : (
+            <div className="divide-y divide-[var(--line)]">
+              {clientes.map((c, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 px-6 py-4">
+                  <div className="min-w-0"><div className="text-fg font-medium truncate">{c.nome || "—"}</div><div className="text-xs text-faint">{c.pacote || "—"}</div></div>
+                  <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-1 border border-line text-faint shrink-0">{c.estado || "—"}</span>
                 </div>
-              );
-            })}</div>}
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pedidos */}
+        <div className="border border-line bg-card">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+            <h2 className="font-display text-lg flex items-center gap-2"><Users size={16} className="text-faint" /> Pedidos que trouxe</h2>
+            <span className="font-mono text-[11px] text-faint">{leads.length}</span>
+          </div>
+          {leads.length === 0 ? (
+            <p className="text-faint text-sm px-6 py-12 text-center">Partilhe o seu link para começar a trazer pedidos.</p>
+          ) : (
+            <div className="divide-y divide-[var(--line)]">
+              {leads.map((l, i) => {
+                const st = String(l.status || "novo");
+                return (
+                  <div key={i} className="flex items-center justify-between gap-4 px-6 py-4">
+                    <div className="min-w-0">
+                      <div className="text-fg font-medium truncate">{l.nome || "—"}</div>
+                      <div className="text-xs text-faint">{[l.plano, l.cidade].filter(Boolean).join(" · ") || "—"} · {fmtData(l.data)}</div>
+                    </div>
+                    <span className={`font-mono text-[9px] uppercase tracking-wider px-2 py-1 shrink-0 ${st === "concluido" ? "bg-accent text-bg" : "border border-line text-faint"}`}>{PROMO_STATUS_LABEL[st] || st}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
-      </div>
-    </>
+    </div>
   );
 }
 
