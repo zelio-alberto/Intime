@@ -75,7 +75,6 @@ function pillEstado(estado: string) {
     : "text-muted border-line bg-card/40";
 }
 
-const METODOS = ["M-Pesa", "e-Mola", "Conta bancária", "Outro"];
 const PROMO_STATUS_LABEL: Record<string, string> = { novo: "Novo", contactado: "Contactado", concluido: "Cliente" };
 const TIPOS_SUPORTE = ["Falha de internet", "Internet lenta", "Problema no pagamento", "Mudança de morada", "Equipamento", "Outro assunto"];
 
@@ -425,127 +424,58 @@ function ClienteSubscricao({ conta, dados, cfg, showToast }: {
 }
 
 /* ===================== CLIENTE: PAGAMENTOS (Billing) ===================== */
+type MetodoPag = { tipo: string; nome?: string; numero?: string; ativo?: boolean };
+
 function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: {
   conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[];
   histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
 }) {
-  const [metodo, setMetodo] = useState("M-Pesa");
-  const [codigo, setCodigo] = useState("");
-  const [busy, setBusy] = useState(false);
-  const mobileMoney = metodo === "M-Pesa" || metodo === "e-Mola";
+  // métodos de pagamento geridos pelo admin (siteConfig/pagamentos); default = M-Pesa
+  const [cfgMetodos, setCfgMetodos] = useState<MetodoPag[] | null>(null);
+  useEffect(() => onSnapshot(doc(db, "siteConfig", "pagamentos"), (s) => {
+    const arr = s.exists() && Array.isArray((s.data() as DocumentData).metodos)
+      ? ((s.data() as DocumentData).metodos as MetodoPag[]).filter((m) => m && m.ativo !== false) : null;
+    setCfgMetodos(arr && arr.length ? arr : null);
+  }, () => setCfgMetodos(null)), []);
+
   const numeroMM = (cfg.contacts.whatsapp && cfg.contacts.whatsapp.length) ? cfg.contacts.whatsapp : cfg.contacts.phone;
+  const metodos: MetodoPag[] = cfgMetodos ?? [{ tipo: "M-Pesa", nome: "Intime", numero: numeroMM }];
+
   const atraso = emAtraso(estadoStr(dados));
   const prox = proximaData(dados, new Date());
   const saldo = atraso ? mtValue(dados.mensalidade) : 0;
 
-  const registar = async (valor: number, extra: Record<string, unknown>) => {
-    let estado = "Pendente";
-    const cod = String(extra.codigo || "");
-    if (cod) {
-      try {
-        const t = await getDoc(doc(db, "transacoesMpesa", cod));
-        if (t.exists()) {
-          const v = typeof t.data().valor === "number" ? (t.data().valor as number) : 0;
-          if (valor === 0 || v + 0.01 >= valor) estado = "Aprovado";
-        }
-      } catch { /* ignora */ }
-    }
-    await addDoc(collection(db, "pagamentos"), {
-      clienteId: dados.clienteId || "", numeroConta: conta, clienteNome: dados.nome || "",
-      mes: monthKey(), valor, metodo, estado, viaPortal: true,
-      ...(dados.promotor ? { promotor: dados.promotor } : {}),
-      data: serverTimestamp(), ...extra,
-    });
-  };
-
-  const submeterCodigo = async () => {
-    const c = codigo.trim().toUpperCase();
-    if (c.length < 6) { showToast("Insira o código da transação."); return; }
-    setBusy(true);
-    try { await registar(mtValue(dados.mensalidade), { codigo: c }); setCodigo(""); showToast("Recebemos o seu código. A equipa vai confirmar em breve."); }
-    catch { showToast("Erro ao submeter. Tente de novo."); }
-    finally { setBusy(false); }
-  };
-
-  const enviarComprovativo = async (file?: File) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const r = sRef(storage, `comprovativos/${conta}/${Date.now()}.jpg`);
-      await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
-      const url = await getDownloadURL(r);
-      await registar(mtValue(dados.mensalidade), { comprovativoUrl: url, codigo: codigo.trim().toUpperCase() });
-      setCodigo("");
-      showToast("Pagamento enviado. A aguardar confirmação da Intime.");
-    } catch { showToast("Não foi possível enviar o comprovativo. Tente de novo ou fale com a equipa."); }
-    finally { setBusy(false); }
-  };
-
-  const wa = (numeroMM || "").replace(/\D/g, "");
-  const waUrl = `https://wa.me/${wa}?text=${encodeURIComponent(`Olá, sou o cliente ${conta}. Tenho uma dúvida sobre pagamento.`)}`;
-
   return (
     <div className="space-y-6">
-      {/* 3 cartões: saldo · ciclo · pagar via */}
-      <div className="grid md:grid-cols-3 gap-4">
-        <div className={panelPad}>
-          <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Saldo</div>
+      {/* resumo: saldo + ciclo */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className={panelPad + (atraso ? " border-[#ff6b6b]/40" : "")}>
+          <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">{atraso ? "Valor em dívida" : "Saldo"}</div>
           <div className="flex items-center gap-2">
-            <span className="font-display text-4xl text-fg">{saldo.toLocaleString("pt-PT")} <span className="text-lg text-muted">MT</span></span>
-            {!atraso && <CheckCircle2 className="text-accent" size={20} />}
+            <span className={`font-display text-5xl ${atraso ? "text-[#ff6b6b]" : "text-fg"}`}>{saldo.toLocaleString("pt-PT")} <span className="text-lg text-muted">MT</span></span>
+            {!atraso && <CheckCircle2 className="text-accent" size={22} />}
           </div>
+          <p className={`text-sm mt-2 ${atraso ? "text-[#ff6b6b]" : "text-muted"}`}>{atraso ? "Regularize para manter o serviço ativo." : "Está tudo em dia."}</p>
         </div>
         <div className={panelPad}>
           <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Ciclo de faturação</div>
           <p className="text-fg text-sm">{dados.diaPagamento ? `Pagamento no dia ${String(dados.diaPagamento).replace(/[^0-9]/g, "")} de cada mês.` : "Definido pela Intime."}</p>
           {prox && <p className="text-muted text-sm mt-1">Próximo: {dataExtenso(prox)}.</p>}
         </div>
-        <div className={panelPad}>
-          <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Pagar via M-Pesa / e-Mola</div>
-          <p className="font-display text-2xl text-fg">{numeroMM || "(definido pela Intime)"}</p>
-        </div>
       </div>
 
-      {/* como pagar */}
-      <div className={panelPad}>
-        <h3 className="font-display text-xl text-fg mb-4">Como pagar</h3>
-        <div className="flex flex-wrap gap-2 mb-5">
-          {METODOS.map((m) => (
-            <button key={m} onClick={() => setMetodo(m)}
-              className={`px-4 py-2 text-xs font-mono uppercase tracking-widest border transition-colors ${m === metodo ? "bg-fg text-bg border-fg" : "border-line text-muted hover:text-fg hover:border-accent/50"}`}>{m}</button>
-          ))}
-        </div>
-
-        <div className="border border-dashed border-line p-5 mb-5 text-sm leading-relaxed">
-          {mobileMoney ? (
-            <>
-              <b>{metodo}</b> — envie <b>{dados.mensalidade || ""} MT</b> para:
-              <div className="font-display text-2xl text-fg mt-1">{numeroMM || "(número definido pela Intime)"}</div>
-            </>
-          ) : (
-            "Peça os dados desta forma de pagamento à equipa pelo WhatsApp e, depois de pagar, envie aqui a foto do comprovativo."
-          )}
-        </div>
-
-        {mobileMoney && (
-          <div className="mb-3">
-            <label className={lbl}>Código da transação <span className="normal-case tracking-normal text-faint">(opcional se enviar foto)</span></label>
-            <input className={field + " mb-3"} placeholder="Ex.: CI8R4T2X9P" spellCheck={false} value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-            <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A submeter…" : "Já paguei — confirmar"}</button>
+      {/* PAGAR — só disponível quando há dívida */}
+      {atraso
+        ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} showToast={showToast} />
+        : (
+          <div className={panelPad + " text-center"}>
+            <CheckCircle2 className="mx-auto mb-3 text-accent" size={30} />
+            <h3 className="font-display text-2xl text-fg mb-1">Sem nada a pagar</h3>
+            <p className="text-muted text-sm">A sua conta está em dia. Quando houver um valor a pagar, o botão de pagamento aparece aqui.</p>
           </div>
         )}
 
-        <label className={btnGhost + " cursor-pointer mt-1"}>
-          <Upload size={15} /> Enviar foto do comprovativo
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
-        </label>
-
-        <p className="text-center text-muted text-sm mt-5">
-          Dúvidas sobre o pagamento? <a href={waUrl} target="_blank" rel="noopener" className="underline hover:text-fg">Falar com a equipa no WhatsApp</a>
-        </p>
-      </div>
-
-      {/* faturas / histórico (tabela) */}
+      {/* histórico */}
       <div className={panel}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-line">
           <h3 className="font-display text-lg text-fg">Histórico de pagamentos</h3>
@@ -577,6 +507,245 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- ASSISTENTE DE PAGAMENTO (animado, por passos) ---------- */
+type PagStep = "metodo" | "origem" | "transferir" | "verificar" | "fallback" | "enviado";
+function isMobileMoney(m?: MetodoPag) { const t = String(m?.tipo || "").toLowerCase(); return t.includes("pesa") || t.includes("mola"); }
+
+function PagamentoWizard({ conta, dados, metodos, contactos, showToast }: {
+  conta: string; dados: DocumentData; metodos: MetodoPag[];
+  contactos: { email: string; whatsapp: string; phone: string }; showToast: (m: string) => void;
+}) {
+  const valor = mtValue(dados.mensalidade);
+  const numeroDaConta = String(dados.contactoWhatsapp || dados.whatsapp || "").trim();
+
+  const [step, setStep] = useState<PagStep>(metodos.length === 1 ? (isMobileMoney(metodos[0]) ? "origem" : "transferir") : "metodo");
+  const [metodoSel, setMetodoSel] = useState<MetodoPag | null>(metodos.length === 1 ? metodos[0] : null);
+  const [usarConta, setUsarConta] = useState(!!numeroDaConta);
+  const [numeroOrigem, setNumeroOrigem] = useState(numeroDaConta);
+  const [codigo, setCodigo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [matched, setMatched] = useState(false);
+
+  const reiniciar = () => {
+    setMetodoSel(metodos.length === 1 ? metodos[0] : null);
+    setStep(metodos.length === 1 ? (isMobileMoney(metodos[0]) ? "origem" : "transferir") : "metodo");
+    setCodigo(""); setMatched(false);
+  };
+
+  const registar = async (estado: string, extra: Record<string, unknown>) => {
+    await addDoc(collection(db, "pagamentos"), {
+      clienteId: dados.clienteId || "", numeroConta: conta, clienteNome: dados.nome || "",
+      mes: monthKey(), valor, metodo: metodoSel?.tipo || "M-Pesa", estado, viaPortal: true,
+      numeroOrigem: numeroOrigem.replace(/\D/g, "") || null,
+      ...(dados.promotor ? { promotor: dados.promotor } : {}),
+      data: serverTimestamp(), ...extra,
+    });
+  };
+
+  // varredura das SMS de pagamento (gateway Intime → transacoesMpesa)
+  const scanSms = async (): Promise<DocumentData | null> => {
+    const local = numeroOrigem.replace(/\D/g, "").slice(-9);
+    if (!local) return null;
+    try {
+      const q = query(collection(db, "transacoesMpesa"), where("remetente", "==", local));
+      const snap = await getDocs(q);
+      const now = Date.now();
+      const m = snap.docs.map((d) => ({ id: d.id, ...d.data() })).find((t: DocumentData) => {
+        const v = typeof t.valor === "number" ? t.valor : 0;
+        const ts = t.createdAt instanceof Timestamp ? t.createdAt.toMillis() : now;
+        const recente = (now - ts) < 1000 * 60 * 60 * 24;
+        return (valor === 0 || v + 0.01 >= valor) && recente;
+      });
+      return m || null;
+    } catch { return null; }
+  };
+
+  // ao entrar em "verificar", corre a varredura (com tempo para a animação respirar)
+  useEffect(() => {
+    if (step !== "verificar") return;
+    let alive = true;
+    (async () => {
+      const [found] = await Promise.all([scanSms(), new Promise((r) => setTimeout(r, 1800))]);
+      if (!alive) return;
+      if (found) {
+        try { await registar("Aprovado", { codigo: (found as DocumentData).codigo || (found as DocumentData).id || "", autoConfirmado: true }); } catch { /* */ }
+        setMatched(true); setStep("enviado");
+      } else {
+        setStep("fallback");
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  const submeterCodigo = async () => {
+    const c = codigo.trim().toUpperCase();
+    if (c.length < 6) { showToast("Insira o código da transação."); return; }
+    setBusy(true);
+    try {
+      let estado = "Pendente";
+      try { const t = await getDoc(doc(db, "transacoesMpesa", c)); if (t.exists()) { const v = typeof t.data().valor === "number" ? t.data().valor as number : 0; if (valor === 0 || v + 0.01 >= valor) estado = "Aprovado"; } } catch { /* */ }
+      await registar(estado, { codigo: c });
+      setMatched(estado === "Aprovado"); setStep("enviado");
+    } catch { showToast("Erro ao submeter. Tente de novo."); }
+    finally { setBusy(false); }
+  };
+
+  const enviarComprovativo = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const r = sRef(storage, `comprovativos/${conta}/${Date.now()}.jpg`);
+      await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
+      const url = await getDownloadURL(r);
+      await registar("Pendente", { comprovativoUrl: url, codigo: codigo.trim().toUpperCase() || null });
+      setMatched(false); setStep("enviado");
+    } catch { showToast("Não foi possível enviar o comprovativo. Tente de novo ou fale com a equipa."); }
+    finally { setBusy(false); }
+  };
+
+  const waDigits = (contactos.whatsapp || contactos.phone || "").replace(/\D/g, "");
+  const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(`Olá, sou o cliente ${conta}. Preciso de ajuda com um pagamento.`)}`;
+  const telUrl = `tel:${contactos.phone || contactos.whatsapp || ""}`;
+
+  // ----- stepper -----
+  const fluxo: PagStep[] = isMobileMoney(metodoSel) || !metodoSel ? ["metodo", "origem", "transferir", "verificar"] : ["metodo", "transferir", "verificar"];
+  const idxAtual = Math.max(0, fluxo.indexOf(step === "fallback" || step === "enviado" ? "verificar" : step));
+  const stepLabels: Record<string, string> = { metodo: "Método", origem: "Número", transferir: "Transferir", verificar: "Confirmar" };
+
+  return (
+    <div className={panelPad + " overflow-hidden"}>
+      {/* cabeçalho + progresso */}
+      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        <h3 className="font-display text-xl text-fg">Pagar {valor.toLocaleString("pt-PT")} MT</h3>
+        {step !== "enviado" && (
+          <div className="flex items-center gap-2">
+            {fluxo.filter((f) => f !== "metodo" || metodos.length > 1).map((f, i, arr) => (
+              <div key={f} className="flex items-center gap-2">
+                <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border transition-colors ${idxAtual >= fluxo.indexOf(f) ? "text-accent border-accent/40 bg-accent/10" : "text-faint border-line"}`}>{stepLabels[f]}</span>
+                {i < arr.length - 1 && <span className="w-4 h-px bg-line" />}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div key={step} className="step-in">
+        {/* PASSO: MÉTODO */}
+        {step === "metodo" && (
+          <div className="space-y-3">
+            <p className="text-muted text-sm mb-1">Como pretende pagar?</p>
+            {metodos.map((m, i) => (
+              <button key={i} onClick={() => { setMetodoSel(m); setStep(isMobileMoney(m) ? "origem" : "transferir"); }}
+                className="w-full text-left border border-line bg-bg p-5 hover:border-accent/50 transition-colors group flex items-center gap-4">
+                <span className="w-11 h-11 grid place-items-center border border-line text-accent shrink-0"><Wallet size={20} /></span>
+                <div className="flex-1 min-w-0"><div className="text-fg font-medium">{m.tipo}</div>{m.nome && <div className="text-faint text-xs">{m.nome}</div>}</div>
+                <ArrowRight size={18} className="text-faint group-hover:text-fg transition-colors" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* PASSO: NÚMERO DE ORIGEM */}
+        {step === "origem" && (
+          <div className="space-y-4">
+            <p className="text-muted text-sm">Com que número {metodoSel?.tipo} vai pagar?</p>
+            {numeroDaConta && (
+              <label className="flex items-center gap-3 border border-line bg-bg px-4 py-3.5 cursor-pointer hover:border-accent/40 transition-colors">
+                <input type="checkbox" className="accent-[var(--accent)]" checked={usarConta}
+                  onChange={(e) => { setUsarConta(e.target.checked); if (e.target.checked) setNumeroOrigem(numeroDaConta); }} />
+                <span className="text-sm text-fg">Usar o número da minha conta <span className="font-mono text-muted">({numeroDaConta})</span></span>
+              </label>
+            )}
+            <div>
+              <label className={lbl}>Número de origem</label>
+              <input className={field} inputMode="tel" placeholder="8X XXX XXXX" value={numeroOrigem}
+                onChange={(e) => { setNumeroOrigem(e.target.value); setUsarConta(false); }} />
+            </div>
+            <div className="flex gap-3">
+              {metodos.length > 1 && <button className={btnGhost + " !w-auto px-6"} onClick={() => setStep("metodo")}>Voltar</button>}
+              <button className={btnPrimary} disabled={numeroOrigem.replace(/\D/g, "").length < 9} onClick={() => setStep("transferir")}>Continuar</button>
+            </div>
+          </div>
+        )}
+
+        {/* PASSO: TRANSFERIR */}
+        {step === "transferir" && (
+          <div className="space-y-5">
+            <div className="border border-dashed border-accent/40 bg-accent/[0.04] p-6 text-center">
+              <p className="text-muted text-sm">Transfira via <b className="text-fg">{metodoSel?.tipo}</b></p>
+              <div className="font-display text-5xl text-fg my-2">{valor.toLocaleString("pt-PT")} <span className="text-2xl text-muted">MT</span></div>
+              <p className="text-muted text-sm mb-1">para o número de pagamento da Intime:</p>
+              <button onClick={() => { navigator.clipboard?.writeText(String(metodoSel?.numero || "")).then(() => showToast("Número copiado.")).catch(() => {}); }}
+                className="inline-flex items-center gap-2 font-display text-3xl text-accent hover:opacity-80 transition-opacity">
+                {metodoSel?.numero || "(definido pela Intime)"} <Copy size={18} />
+              </button>
+              {metodoSel?.nome && <p className="text-faint text-xs mt-2">Titular: {metodoSel.nome}</p>}
+            </div>
+            <p className="text-muted text-sm text-center">Depois de transferir, confirme abaixo. Vamos procurar o seu pagamento automaticamente.</p>
+            <div className="flex gap-3">
+              {isMobileMoney(metodoSel) && <button className={btnGhost + " !w-auto px-6"} onClick={() => setStep("origem")}>Voltar</button>}
+              <button className={btnPrimary} onClick={() => setStep("verificar")}><Check size={16} /> Já efetuei o pagamento</button>
+            </div>
+          </div>
+        )}
+
+        {/* PASSO: VERIFICAR (varredura) */}
+        {step === "verificar" && (
+          <div className="py-10 text-center">
+            <div className="ring-pulse relative w-16 h-16 mx-auto grid place-items-center border border-accent/40 rounded-full text-accent mb-6">
+              <RefreshCcw size={24} className="animate-spin" />
+            </div>
+            <h4 className="font-display text-xl text-fg mb-1">A procurar o seu pagamento…</h4>
+            <p className="text-muted text-sm">A verificar as transações {metodoSel?.tipo} recebidas no número da Intime.</p>
+          </div>
+        )}
+
+        {/* PASSO: FALLBACK (não encontrado → código ou comprovativo) */}
+        {step === "fallback" && (
+          <div className="space-y-5">
+            <div className="border border-line bg-bg p-5 text-sm text-muted">
+              Ainda não encontrámos o seu pagamento automaticamente — às vezes a confirmação demora um pouco. Ajude-nos a confirmar mais depressa:
+            </div>
+            <div>
+              <label className={lbl}>ID / código da transação</label>
+              <input className={field + " mb-3"} placeholder="Ex.: CI8R4T2X9P" spellCheck={false} value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+              <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A confirmar…" : "Confirmar com o código"}</button>
+            </div>
+            <div className="flex items-center gap-4 text-faint text-xs"><span className="flex-1 h-px bg-line" /> ou <span className="flex-1 h-px bg-line" /></div>
+            <label className={btnGhost + " cursor-pointer"}>
+              <Upload size={15} /> {busy ? "A enviar…" : "Anexar foto do comprovativo"}
+              <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
+            </label>
+            <button className="w-full text-center text-muted text-sm hover:text-fg transition-colors" onClick={() => setStep("verificar")}>Tentar procurar de novo</button>
+          </div>
+        )}
+
+        {/* PASSO: ENVIADO (confirmação animada) */}
+        {step === "enviado" && (
+          <div className="py-8 text-center">
+            <div className={`pop-in w-20 h-20 mx-auto grid place-items-center rounded-full mb-5 ${matched ? "bg-accent text-bg" : "border-2 border-accent text-accent"}`}>
+              <Check size={38} />
+            </div>
+            <h4 className="font-display text-2xl text-fg mb-2">{matched ? "Pagamento confirmado!" : "Pagamento recebido"}</h4>
+            <p className="text-muted text-sm max-w-md mx-auto">
+              {matched
+                ? "Encontrámos a sua transação e a sua conta vai ser atualizada já a seguir. Obrigado!"
+                : "Recebemos os seus dados. A confirmação costuma demorar até 10 minutos (muitas vezes menos)."}
+            </p>
+            <p className="text-faint text-sm mt-4">Está com alguma dificuldade? Fale connosco:</p>
+            <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
+              <a href={waUrl} target="_blank" rel="noopener" className="inline-flex items-center gap-2 px-5 py-2.5 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">WhatsApp</a>
+              <a href={telUrl} className="inline-flex items-center gap-2 px-5 py-2.5 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">Ligar</a>
+            </div>
+            <button className="mt-6 text-muted text-sm underline underline-offset-4 hover:text-fg transition-colors" onClick={reiniciar}>Fazer outro pagamento</button>
           </div>
         )}
       </div>

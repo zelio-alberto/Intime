@@ -96,3 +96,24 @@ html.dark .logo-img { filter: invert(1) brightness(1.9); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .conta-fade { animation: contaFade 0.4s ease both; }
+
+/* assistente de pagamento — transição de passos + sucesso */
+@keyframes stepIn {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.step-in { animation: stepIn 0.35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pop {
+  0%   { transform: scale(0.5); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.pop-in { animation: pop 0.5s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes ringPulse {
+  0%   { transform: scale(0.8); opacity: 0.7; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.ring-pulse::before {
+  content: ""; position: absolute; inset: 0; border-radius: 9999px;
+  border: 2px solid var(--accent); animation: ringPulse 1.4s ease-out infinite;
+}
