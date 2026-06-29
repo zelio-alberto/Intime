@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { Satellite, Check, AlertTriangle, Search, BadgeCheck } from "lucide-react";
+import { Satellite, Check, AlertTriangle, Search, BadgeCheck, RefreshCw } from "lucide-react";
 
 type Kit = { id: string } & Record<string, any>;
 
@@ -23,6 +23,26 @@ export default function MensalidadesStarlink() {
   const [filtro, setFiltro] = useState<"apagar" | "pagos" | "todos">("apagar");
   const [busca, setBusca] = useState("");
   const [marcando, setMarcando] = useState<string | null>(null);
+  const [verificando, setVerificando] = useState(false);
+  const [verif, setVerif] = useState("");
+
+  // Força a verificação do leitor de emails (backend POST /api/run/email-check).
+  // URL e segredo ficam só no browser do admin (localStorage), nunca no código.
+  const verificarEmails = async () => {
+    let url = localStorage.getItem("intime_server_url") || "";
+    let secret = localStorage.getItem("intime_run_secret") || "";
+    if (!url) { const v = window.prompt("URL do servidor de gestão (ex.: https://intime-gestao-server.onrender.com):", ""); if (!v) return; url = v.trim().replace(/\/+$/, ""); localStorage.setItem("intime_server_url", url); }
+    if (!secret) { const v = window.prompt("RUN_SECRET do servidor:", ""); if (!v) return; secret = v.trim(); localStorage.setItem("intime_run_secret", secret); }
+    setVerificando(true); setVerif("");
+    try {
+      const r = await fetch(`${url}/api/run/email-check`, { method: "POST", headers: { "x-run-secret": secret } });
+      const j = await r.json().catch(() => ({} as any));
+      if (!r.ok) setVerif(`Erro (${r.status}): ${j.error || "verifique o URL e o segredo"}.`);
+      else setVerif(`✓ Verificados ${j.verificados ?? "?"} kit(s). Os estados abaixo atualizam-se em segundos.`);
+    } catch {
+      setVerif("Servidor indisponível — confirme que o backend de gestão está no ar (deploy no Render).");
+    } finally { setVerificando(false); }
+  };
 
   useEffect(() => {
     const u = onSnapshot(collection(db, "kits"),
@@ -64,8 +84,16 @@ export default function MensalidadesStarlink() {
 
   return (
     <div>
-      <h1 className={pageTitle}>Mensalidades Starlink</h1>
-      <p className="text-muted text-sm mb-3">Os pagamentos que a Intime deve fazer à Starlink por cada kit ativo. O estado vem do leitor de emails da Starlink; pode marcar como pago manualmente.</p>
+      <div className="flex items-start justify-between gap-4 mb-2">
+        <div>
+          <h1 className={pageTitle}>Mensalidades Starlink</h1>
+          <p className="text-muted text-sm">Os pagamentos que a Intime deve fazer à Starlink por cada kit ativo. O estado vem do leitor de emails da Starlink; pode marcar como pago manualmente.</p>
+        </div>
+        <button onClick={verificarEmails} disabled={verificando} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors shrink-0 disabled:opacity-50">
+          <RefreshCw size={14} className={verificando ? "animate-spin" : ""} /> {verificando ? "A verificar…" : "Verificar emails"}
+        </button>
+      </div>
+      {verif && <div className="border border-line bg-card px-4 py-3 text-sm text-fg mb-4">{verif}</div>}
       <div className="border border-line bg-card/40 px-4 py-3 text-xs text-muted mb-8 flex items-start gap-2">
         <AlertTriangle size={15} className="text-faint shrink-0 mt-0.5" />
         A verificação automática (leitor de emails) corre no servidor de gestão. Enquanto não estiver no ar, use “Marcar como pago”; quando o leitor confirmar, o estado passa a <b className="text-fg">Pago</b> sozinho.

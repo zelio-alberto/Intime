@@ -8,7 +8,7 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signInAnonymously, signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, Check, Clock, X as XIcon, RefreshCcw, Ban, Copy, Link2,
@@ -176,7 +176,9 @@ export default function Conta() {
     return () => { active = false; };
   }, [gEmail, contaExiste]);
 
-  const entrarConta = (c: string) => { localStorage.setItem("numeroConta", c); setManualConta(c); };
+  // login por nº de conta: autentica anonimamente para as regras Firestore
+  // protegidas autorizarem leitura/escrita do portal (sem expor email/Google).
+  const entrarConta = (c: string) => { localStorage.setItem("numeroConta", c); setManualConta(c); signInAnonymously(auth).catch(() => {}); };
   const entrarGoogle = async () => { await signInWithPopup(auth, googleProvider); };
   const sair = () => {
     localStorage.removeItem("numeroConta");

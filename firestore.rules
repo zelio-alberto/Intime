@@ -1,0 +1,109 @@
+rules_version = '2';
+// =============================================================================
+// Intime — regras Firestore (projeto zuma-1fec6)
+// Publicar em: Consola Firebase → Firestore → Regras (colar e Publicar)
+// ou via CLI: firebase deploy --only firestore:rules
+//
+// Notas de autenticação:
+//  • App do cliente (Flutter) e gateway usam Auth ANÓNIMA.
+//  • Portal web: login Google (tem email) OU nº de conta → agora também faz
+//    sign-in ANÓNIMO, por isso request.auth != null em ambos os casos.
+//  • Admin = email principal OU consta em starlinkAdmins/{email}.
+// =============================================================================
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function authed() { return request.auth != null; }
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email == "zelio.a.chirindza@gmail.com" ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+    // o cliente só pode tocar nestes campos de contacto em portalContas:
+    function soContacto() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['contactoWhatsapp', 'contactoAlternativo', 'contactoAtualizadoEm']);
+    }
+
+    // ---------- Config pública do site (inclui metodosPagamento) ----------
+    match /siteConfig/{doc} {
+      allow read: if true;            // o site e o portal leem (preços, métodos…)
+      allow write: if isAdmin();
+    }
+    match /appConfig/{doc} {
+      allow read: if authed();        // chaves (ex.: Groq) — só autenticados
+      allow write: if isAdmin();
+    }
+    match /starlinkAdmins/{email} {
+      allow read: if authed();
+      allow write: if isAdmin();
+    }
+
+    // ---------- Geridos pela equipa ----------
+    match /clientes/{id}   { allow read: if authed(); allow write: if isAdmin(); }
+    match /kits/{id}       { allow read: if authed(); allow write: if isAdmin(); }
+    match /contratos/{id}  { allow read: if authed(); allow write: if isAdmin(); }
+    match /movimentos/{id} { allow read, write: if isAdmin(); }
+    match /counters/{id}   { allow read, write: if isAdmin(); }
+
+    // ---------- Portal do cliente ----------
+    match /portalEmails/{email} {
+      allow get: if authed();
+      allow list, write: if isAdmin();
+    }
+    match /portalContas/{conta} {
+      allow get: if authed();                 // o cliente lê a sua conta
+      allow list: if isAdmin();
+      allow create, delete: if isAdmin();
+      // a equipa muda tudo; o cliente só os campos de contacto
+      allow update: if isAdmin() || (authed() && soContacto());
+    }
+
+    // ---------- Pagamentos (cliente cria; equipa gere) ----------
+    match /pagamentos/{id} {
+      allow create: if authed();
+      allow read: if authed();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- Transações M-Pesa/e-Mola (gateway escreve) ----------
+    match /transacoesMpesa/{id} {
+      allow create: if true;                  // gateway (anónimo) grava SMS
+      allow get: if authed();                 // cliente confirma por código
+      allow list, update, delete: if isAdmin();
+    }
+
+    // ---------- Leads / suporte / mensagens ----------
+    match /inscricoes/{id} {
+      allow create: if true;
+      allow read: if isAdmin() ||
+        (authed() && request.auth.token.email != null &&
+         resource.data.email == request.auth.token.email.lower());
+      allow update, delete: if isAdmin();
+    }
+    match /suporte/{id} {
+      allow create: if authed();
+      allow read: if authed();                // cliente filtra por numeroConta na app
+      allow update, delete: if isAdmin();
+    }
+    match /mensagens/{id} {
+      allow create: if true;                  // formulário de contacto do site
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ---------- Promotores ----------
+    match /promotores/{codigo} {
+      allow get: if authed();
+      allow list, write: if isAdmin();
+    }
+    match /promotorEmails/{email} {
+      allow get: if authed();
+      allow list, write: if isAdmin();
+    }
+    match /promotorConvites/{token} {
+      allow get: if true;                     // o link de convite é o segredo
+      allow write: if isAdmin();
+    }
+  }
+}
