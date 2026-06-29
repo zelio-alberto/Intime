@@ -679,22 +679,21 @@ function ClienteDefinicoes({ conta, dados, gEmail, isCliente, isPromotor, showTo
   isCliente: boolean; isPromotor: boolean; showToast: (m: string) => void; onSair: () => void;
 }) {
   const [wa, setWa] = useState("");
-  const [email, setEmail] = useState("");
   const [alt, setAlt] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setWa(String(dados.contactoWhatsapp ?? dados.whatsapp ?? ""));
-    setEmail(String(dados.contactoEmail ?? dados.email ?? gEmail ?? ""));
     setAlt(String(dados.contactoAlternativo ?? ""));
-  }, [dados, gEmail]);
+  }, [dados]);
 
+  // NÃO escreve email (identidade/login — só a equipa muda) nem whatsappLast4 (fator de login).
   const guardar = async () => {
     if (!conta) return;
     setSaving(true);
     try {
       await setDoc(doc(db, "portalContas", conta), {
-        contactoWhatsapp: wa.trim(), contactoEmail: email.trim(), contactoAlternativo: alt.trim(),
+        contactoWhatsapp: wa.trim(), contactoAlternativo: alt.trim(),
         contactoAtualizadoEm: serverTimestamp(),
       }, { merge: true });
       showToast("Contacto atualizado.");
@@ -736,9 +735,9 @@ function ClienteDefinicoes({ conta, dados, gEmail, isCliente, isPromotor, showTo
           <h3 className="font-display text-xl text-fg mb-5">Atualizar contacto</h3>
           <div className="grid sm:grid-cols-2 gap-4">
             <div><label className={lbl}>Número de WhatsApp</label><input className={field} value={wa} onChange={(e) => setWa(e.target.value)} /></div>
-            <div><label className={lbl}>Email</label><input className={field} value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-            <div className="sm:col-span-2"><label className={lbl}>Contacto alternativo (opcional)</label><input className={field} value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
+            <div><label className={lbl}>Contacto alternativo (opcional)</label><input className={field} value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
           </div>
+          <p className="text-faint text-xs mt-4">O <b className="text-muted font-medium">email</b> é o seu acesso à conta e não é editável aqui. Para o alterar, fale com a equipa.</p>
           <div className="mt-5 sm:max-w-xs"><button className={btnPrimary} disabled={saving} onClick={guardar}>{saving ? "A guardar…" : "Guardar contacto"}</button></div>
         </div>
       )}
