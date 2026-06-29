@@ -11,21 +11,21 @@ import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
-  LogOut, Upload, MessageCircle, Check, Clock, X as XIcon,
-  RefreshCcw, Ban, Copy, Link2, Users, UserCheck,
-  Wallet, Wifi, Megaphone, ArrowRight, TrendingUp, ExternalLink,
+  LogOut, Upload, Check, Clock, X as XIcon, RefreshCcw, Ban, Copy, Link2,
+  Users, UserCheck, Wallet, Wifi, Megaphone, ArrowRight, TrendingUp, ExternalLink,
+  Home, Receipt, Mail, Settings, CheckCircle2, Plus,
 } from "lucide-react";
 
 /* ===========================================================================
-   PÁGINA ÚNICA "A MINHA CONTA"
-   Junta, na mesma página e de forma adaptativa:
-     • Cliente   (portalContas)   — login nº conta+4díg OU Google
-     • Lead      (inscricoes)     — pediu instalação, ainda sem Starlink
-     • Promotor  (promotores)     — login Google
+   PORTAL "A MINHA CONTA" — estilo painel (barra lateral + secções), inspirado
+   no portal de cliente da Starlink. Junta, de forma adaptativa pelos papéis:
+     • Cliente   (portalContas)   — Início · Subscrição · Pagamentos · Suporte · Definições
+     • Promotor  (promotores)     — secção Promotor
+     • Lead      (inscricoes)     — secção Pedido
    O email Google é o elo que liga os papéis. O admin (/admin) NÃO entra aqui.
    =========================================================================== */
 
-/* ---------- helpers (espelham models/account.dart) ---------- */
+/* ---------- helpers ---------- */
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 function mtValue(v: unknown): number {
   if (typeof v === "number") return v;
@@ -61,38 +61,41 @@ function fmtData(ts: unknown) {
   return "";
 }
 function estadoStr(d: DocumentData) { return String(d.estado ?? ""); }
+function initials(nome: string) {
+  const parts = nome.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "IN";
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
+function localStr(d: DocumentData) {
+  return [d.bairro, d.cidade].filter(Boolean).join(", ") || String(d.endereco || d.localidade || d.morada || "—");
+}
+function pillEstado(estado: string) {
+  return emAtraso(estado) ? "text-[#ff6b6b] border-[#ff6b6b]/40 bg-[#ff6b6b]/10"
+    : estadoOk(estado) ? "text-accent border-accent/40 bg-accent/10"
+    : "text-muted border-line bg-card/40";
+}
 
 const METODOS = ["M-Pesa", "e-Mola", "Conta bancária", "Outro"];
 const PROMO_STATUS_LABEL: Record<string, string> = { novo: "Novo", contactado: "Contactado", concluido: "Cliente" };
+const TIPOS_SUPORTE = ["Falha de internet", "Internet lenta", "Problema no pagamento", "Mudança de morada", "Equipamento", "Outro assunto"];
 
-/* ---------- estilos partilhados (mesmas classes do site) ---------- */
+/* ---------- estilos partilhados ---------- */
 const field = "w-full bg-bg border border-line px-4 py-3.5 text-sm text-fg outline-none focus:border-accent transition-colors";
 const lbl = "block text-[11px] font-mono uppercase tracking-[0.15em] text-faint mb-2";
 const btnPrimary = "w-full py-4 bg-fg text-bg font-mono text-xs uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50 flex items-center justify-center gap-2";
 const btnGhost = "w-full py-3.5 border border-line text-fg font-mono text-xs uppercase tracking-[0.2em] font-bold hover:border-accent/50 hover:bg-card/40 transition-colors disabled:opacity-50 flex items-center justify-center gap-2";
-const cardCls = "border border-line p-6 md:p-8 bg-card/30";
-const sectionLbl = "font-mono text-accent text-[10px] uppercase tracking-[0.25em] mb-4 flex items-center gap-2";
-
-/* badge de papel (Cliente / Pedido / Promotor) na faixa de identidade */
-function RoleBadge({ icon: Ic, label, accent }: { icon: typeof Wifi; label: string; accent?: boolean }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-[0.2em] px-2.5 py-1 border ${accent ? "text-accent border-accent/40 bg-accent/10" : "text-muted border-line bg-card/40"}`}>
-      <Ic size={12} /> {label}
-    </span>
-  );
-}
+const panel = "border border-line bg-card";
+const panelPad = panel + " p-6 md:p-8";
 
 /* ===================== ORQUESTRADOR ===================== */
 export default function Conta() {
   const cfg = useSiteConfig();
 
-  // sessões: nº de conta (cliente, localStorage) e/ou Google (elo de papéis)
   const [manualConta, setManualConta] = useState<string | null>(() => localStorage.getItem("numeroConta"));
   const [gEmail, setGEmail] = useState<string | null>(null);
   const [gName, setGName] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  // dados resolvidos
   const [conta, setConta] = useState<string | null>(manualConta);
   const [dados, setDados] = useState<DocumentData>({});
   const [contaExiste, setContaExiste] = useState(false);
@@ -101,6 +104,7 @@ export default function Conta() {
   const [promo, setPromo] = useState<DocumentData | null>(null);
   const [codigo, setCodigo] = useState<string | null>(null);
   const [lead, setLead] = useState<DocumentData | null>(null);
+  const [secao, setSecao] = useState("");
 
   const [toast, setToast] = useState("");
   const showToast = useCallback((m: string) => {
@@ -108,14 +112,12 @@ export default function Conta() {
     window.setTimeout(() => setToast(""), 3400);
   }, []);
 
-  /* sessão Google partilhada (deteta todos os papéis pelo email) */
   useEffect(() => onAuthStateChanged(auth, (u) => {
     setGEmail(u?.email ?? null);
     setGName(u?.displayName ?? null);
     setAuthReady(true);
   }), []);
 
-  /* resolver o nº de conta do cliente: manual OU via portalEmails (Google) */
   useEffect(() => {
     let active = true;
     if (manualConta) { setConta(manualConta); return; }
@@ -126,7 +128,6 @@ export default function Conta() {
     return () => { active = false; };
   }, [manualConta, gEmail]);
 
-  /* subscrição à conta + histórico de pagamentos */
   useEffect(() => {
     if (!conta) { setDados({}); setContaExiste(false); setHist([]); setHistLoading(false); return; }
     setHistLoading(true);
@@ -138,7 +139,6 @@ export default function Conta() {
     return () => { unsubC(); unsubH(); };
   }, [conta]);
 
-  /* promotor pelo email Google */
   useEffect(() => {
     let active = true;
     if (!gEmail) { setPromo(null); setCodigo(null); return; }
@@ -152,7 +152,6 @@ export default function Conta() {
     return () => { active = false; };
   }, [gEmail]);
 
-  /* lead (pedido de instalação) pelo email Google — só se ainda não é cliente */
   useEffect(() => {
     let active = true;
     if (!gEmail || contaExiste) { setLead(null); return; }
@@ -171,7 +170,7 @@ export default function Conta() {
   const sair = () => {
     localStorage.removeItem("numeroConta");
     setManualConta(null); setConta(null); setDados({}); setContaExiste(false);
-    setHist([]); setPromo(null); setCodigo(null); setLead(null);
+    setHist([]); setPromo(null); setCodigo(null); setLead(null); setSecao("");
     signOut(auth).catch(() => {});
   };
 
@@ -179,19 +178,12 @@ export default function Conta() {
   const isCliente = contaExiste;
   const isLead = !!lead && !isCliente;
   const isPromotor = !!promo && !!codigo;
-  // quem é só promotor (sem conta nem pedido) deve aterrar no painel de promotor,
-  // não num apelo a "tornar-se cliente". Define quem lidera a página.
-  const promotorPrimary = isPromotor && !isCliente && !isLead;
   const nome = String(dados.nome || promo?.nome || gName || "");
 
+  /* ----- estados sem painel ----- */
   if (!authReady && !manualConta) {
-    return (
-      <Layout>
-        <div className="min-h-screen grid place-items-center px-6"><p className="text-muted text-sm">A carregar…</p></div>
-      </Layout>
-    );
+    return <Layout><div className="min-h-screen grid place-items-center px-6"><p className="text-muted text-sm">A carregar…</p></div></Layout>;
   }
-
   if (!hasSession) {
     return (
       <Layout>
@@ -201,81 +193,101 @@ export default function Conta() {
     );
   }
 
-  const clienteSection = (
-    <>
-      <div className={sectionLbl}><Wifi size={13} /> A minha Starlink</div>
-      {isCliente
-        ? <ClientePortal conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />
-        : isLead
-          ? <LeadStatus lead={lead!} />
-          : promotorPrimary
-            ? <CtaClienteSlim />
-            : <CtaCliente />}
-    </>
+  /* ----- navegação por papéis ----- */
+  const nav: { key: string; label: string; icon: typeof Home }[] = [];
+  if (isCliente) nav.push(
+    { key: "inicio", label: "Início", icon: Home },
+    { key: "subscricao", label: "Subscrição", icon: Wifi },
+    { key: "pagamentos", label: "Pagamentos", icon: Receipt },
+    { key: "suporte", label: "Suporte", icon: Mail },
   );
-  const promotorSection = (
-    <>
-      <div className={sectionLbl}><Megaphone size={13} /> Promotor</div>
-      {isPromotor
-        ? <PromotorPainel codigo={codigo!} promo={promo!} />
-        : <TeaserPromotor temGoogle={!!gEmail} />}
-    </>
-  );
-  const [first, second] = promotorPrimary ? [promotorSection, clienteSection] : [clienteSection, promotorSection];
+  if (isLead) nav.push({ key: "pedido", label: "O meu pedido", icon: Clock });
+  if (isPromotor) nav.push({ key: "promotor", label: "Promotor", icon: Megaphone });
+  if (isCliente || isPromotor) nav.push({ key: "definicoes", label: "Definições", icon: Settings });
+
+  const defaultSec = isCliente ? "inicio" : isPromotor ? "promotor" : isLead ? "pedido" : "definicoes";
+  const active = nav.some((n) => n.key === secao) ? secao : defaultSec;
+  const activeItem = nav.find((n) => n.key === active);
+
+  const subAtivo = isCliente ? `Conta ${conta}` : isLead ? "Pedido de instalação" : gEmail || "";
+
+  const content = (() => {
+    switch (active) {
+      case "inicio": return <ClienteHome dados={dados} go={setSecao} isPromotor={isPromotor} />;
+      case "subscricao": return <ClienteSubscricao conta={conta!} dados={dados} cfg={cfg} showToast={showToast} />;
+      case "pagamentos": return <ClientePagamentos conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />;
+      case "suporte": return <ClienteSuporte conta={conta!} showToast={showToast} />;
+      case "promotor": return <PromotorPainel codigo={codigo!} promo={promo!} />;
+      case "pedido": return lead ? <LeadStatus lead={lead} /> : null;
+      case "definicoes": return <ClienteDefinicoes conta={conta} dados={dados} gEmail={gEmail} isCliente={isCliente} isPromotor={isPromotor} showToast={showToast} onSair={sair} />;
+      default: return <div className="space-y-6"><CtaCliente /><TeaserPromotor temGoogle={!!gEmail} /></div>;
+    }
+  })();
 
   return (
-    <PortalShell identity={gEmail || conta || ""} onSair={sair}>
-      <section className="py-12 lg:py-16 min-h-screen">
-        {/* ===== FAIXA DE IDENTIDADE ===== */}
-        <div className="border-b border-line pb-10 mb-12">
-          <div className="max-w-[1280px] mx-auto px-6 lg:px-12">
-            <div className="flex items-center gap-2 mb-4 flex-wrap">
-              {isCliente && <RoleBadge icon={Wifi} label="Cliente" />}
-              {isLead && <RoleBadge icon={Clock} label="Pedido" />}
-              {isPromotor && <RoleBadge icon={Megaphone} label="Promotor" accent />}
-            </div>
-            <h1 className="font-display text-4xl md:text-6xl xl:text-7xl text-fg tracking-tight leading-[0.95]">{nome || "A minha conta"}</h1>
-            <div className="text-muted text-sm mt-4">
-              {isCliente ? <>Conta <span className="font-mono text-fg">{conta}</span></>
-                : isLead ? "Pedido de instalação em curso"
-                : gEmail ? <span className="font-mono text-fg">{gEmail}</span> : "Visitante"}
-            </div>
-          </div>
-        </div>
-
-        {/* ===== CONTEÚDO (largura ampla) ===== */}
-        <div className="max-w-[1280px] mx-auto px-6 lg:px-12 space-y-16">
-          <div>{first}</div>
-          <div>{second}</div>
-        </div>
-      </section>
-
+    <PortalShell
+      nome={nome} identity={gEmail || conta || ""} onSair={sair}
+      nav={nav} active={active} onNav={setSecao}
+      title={activeItem?.label || "A minha conta"} subtitle={subAtivo}
+    >
+      {content}
       {toast && <Toast msg={toast} />}
     </PortalShell>
   );
 }
 
-/* shell de PAINEL — substitui o site público quando há sessão (como o /admin):
-   sem nav pública nem footer, sem botão "Entrar"; barra própria com Sair. */
-function PortalShell({ identity, onSair, children }: { identity: string; onSair: () => void; children: ReactNode }) {
+/* ===================== SHELL DE PAINEL (barra lateral) ===================== */
+function PortalShell({ nome, identity, onSair, nav, active, onNav, title, subtitle, children }: {
+  nome: string; identity: string; onSair: () => void;
+  nav: { key: string; label: string; icon: typeof Home }[];
+  active: string; onNav: (k: string) => void; title: string; subtitle?: string; children: ReactNode;
+}) {
+  const item = (it: { key: string; label: string; icon: typeof Home }, mobile = false) => {
+    const on = active === it.key;
+    return (
+      <button key={it.key} onClick={() => onNav(it.key)}
+        className={`flex items-center gap-3 transition-colors whitespace-nowrap ${mobile ? "px-4 py-2.5 text-xs font-mono uppercase tracking-widest border" : "px-4 py-3 text-sm"} ${on
+          ? mobile ? "bg-fg text-bg border-fg" : "bg-card text-fg border-l-2 border-accent"
+          : mobile ? "border-line text-muted hover:text-fg" : "text-muted hover:text-fg hover:bg-card/40 border-l-2 border-transparent"}`}>
+        <it.icon size={mobile ? 14 : 18} /> {it.label}
+      </button>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-bg text-fg flex flex-col font-body relative">
+    <div className="min-h-screen bg-bg text-fg flex flex-col relative">
       <div className="noise-bg" />
       <header className="sticky top-0 z-50 bg-bg/90 backdrop-blur-xl border-b border-line">
-        <div className="max-w-[1280px] mx-auto px-6 lg:px-12">
+        <div className="max-w-[1400px] mx-auto px-6 lg:px-10">
           <div className="flex items-center justify-between h-16 gap-4">
             <Link to="/" className="flex items-center gap-3 font-display font-bold text-xl text-fg">
               <img src="/logo-intime.png" alt="Intime" className="logo-img w-8 h-8" draggable={false} /> <span>Portal</span>
             </Link>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4 sm:gap-5">
               <a href="/" className="hidden sm:flex items-center gap-2 text-xs text-muted hover:text-fg transition-colors"><ExternalLink size={14} /> Ver o site</a>
-              {identity && <span className="hidden md:block text-xs text-faint truncate max-w-[220px]">{identity}</span>}
+              <div className="w-9 h-9 grid place-items-center rounded-full bg-card border border-line text-fg text-xs font-mono font-bold" title={identity}>{initials(nome || identity)}</div>
               <button onClick={onSair} className="flex items-center gap-2 text-xs text-muted hover:text-accent transition-colors"><LogOut size={16} /> <span className="hidden sm:inline">Sair</span></button>
             </div>
           </div>
         </div>
       </header>
-      <main className="flex-1 relative z-10">{children}</main>
+
+      <div className="flex-1 relative z-10 w-full max-w-[1400px] mx-auto lg:flex">
+        {nav.length > 1 && (
+          <aside className="lg:w-60 lg:shrink-0 lg:border-r border-line">
+            <nav className="hidden lg:flex flex-col gap-1 p-4 sticky top-16">{nav.map((it) => item(it))}</nav>
+            <nav className="lg:hidden flex gap-2 overflow-x-auto px-6 py-3 border-b border-line">{nav.map((it) => item(it, true))}</nav>
+          </aside>
+        )}
+
+        <main className="flex-1 min-w-0 px-6 lg:px-10 py-8 lg:py-12">
+          <div className="mb-8">
+            <h1 className="font-display text-4xl md:text-5xl text-fg tracking-tight leading-none">{title}</h1>
+            {subtitle && <p className="text-muted text-sm mt-3 font-mono">{subtitle}</p>}
+          </div>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
@@ -283,8 +295,639 @@ function PortalShell({ identity, onSair, children }: { identity: string; onSair:
 /* toast partilhado */
 function Toast({ msg }: { msg: string }) {
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-7 z-[500] bg-fg text-bg px-6 py-3.5 text-sm font-medium shadow-2xl">
-      {msg}
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-7 z-[500] bg-fg text-bg px-6 py-3.5 text-sm font-medium shadow-2xl">{msg}</div>
+  );
+}
+
+/* ===================== CLIENTE: INÍCIO (Home) ===================== */
+function ClienteHome({ dados, go, isPromotor }: { dados: DocumentData; go: (k: string) => void; isPromotor: boolean }) {
+  const estado = String(dados.estado ?? "—");
+  const atraso = emAtraso(estado);
+  const prox = proximaData(dados, new Date());
+  const saldo = atraso ? mtValue(dados.mensalidade) : 0;
+
+  const cards: { icon: typeof Wifi; title: string; desc: string; to: string }[] = [
+    { icon: Wifi, title: "A minha subscrição", desc: "Pacote, estado e pedidos", to: "subscricao" },
+    { icon: Receipt, title: "Pagamentos", desc: "Pagar e ver o histórico", to: "pagamentos" },
+    { icon: Mail, title: "Suporte", desc: "Abrir e acompanhar pedidos", to: "suporte" },
+    { icon: Settings, title: "Definições", desc: "Contactos e conta", to: "definicoes" },
+  ];
+  if (isPromotor) cards.push({ icon: Megaphone, title: "Promotor", desc: "Link e comissões", to: "promotor" });
+
+  return (
+    <div className="space-y-6">
+      {/* Saldo / próximo pagamento */}
+      <div className={panelPad}>
+        <div className="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">{atraso ? "Valor em dívida" : "Saldo"}</div>
+            <div className="flex items-center gap-3">
+              <span className="font-display text-5xl md:text-6xl text-fg leading-none">{saldo.toLocaleString("pt-PT")} <span className="text-2xl text-muted">MT</span></span>
+              {!atraso && <CheckCircle2 className="text-accent" size={28} />}
+            </div>
+            <p className={`text-sm mt-3 ${atraso ? "text-[#ff6b6b]" : "text-muted"}`}>
+              {atraso ? "Conta em atraso — regularize assim que possível." : prox ? `Próximo pagamento: ${dataExtenso(prox)}` : "Está tudo em dia."}
+            </p>
+          </div>
+          <button onClick={() => go("pagamentos")} className="px-8 py-4 bg-fg text-bg font-mono text-xs uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors flex items-center gap-2">
+            {atraso ? "Pagar agora" : "Pagar"} <ArrowRight size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* atalhos */}
+      <div className="grid sm:grid-cols-2 gap-4">
+        {cards.map((c, i) => (
+          <button key={i} onClick={() => go(c.to)} className={`text-left ${panel} p-6 hover:border-accent/50 transition-colors group flex items-start gap-4`}>
+            <span className="w-11 h-11 grid place-items-center border border-line text-accent shrink-0"><c.icon size={20} /></span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="font-display text-lg text-fg">{c.title}</h3>
+                <ArrowRight size={16} className="text-faint group-hover:text-fg transition-colors shrink-0" />
+              </div>
+              <p className="text-muted text-sm mt-1">{c.desc}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== CLIENTE: SUBSCRIÇÃO ===================== */
+function ClienteSubscricao({ conta, dados, cfg, showToast }: {
+  conta: string; dados: DocumentData; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
+}) {
+  const estado = String(dados.estado ?? "—");
+  const prox = proximaData(dados, new Date());
+  const rows: [string, string][] = [
+    ["Titular", String(dados.nome ?? "—")],
+    ["Conta", conta],
+    ["Pacote", String(dados.pacote ?? "—")],
+    ["Mensalidade", dados.mensalidade ? `${dados.mensalidade} MT` : "—"],
+    ["Dia de pagamento", dados.diaPagamento ? `Dia ${String(dados.diaPagamento).replace(/[^0-9]/g, "")}` : "—"],
+    ["Próximo pagamento", prox ? dataExtenso(prox) : "—"],
+  ];
+
+  const abrirPedido = async (tipo: string, descricao: string) => {
+    try {
+      await addDoc(collection(db, "suporte"), { numeroConta: conta, tipo, descricao, estado: "Recebido", createdAt: serverTimestamp() });
+      showToast(`Pedido enviado: ${tipo}. A equipa vai contactá-lo.`);
+    } catch { showToast("Não foi possível enviar. Tente de novo."); }
+  };
+  const pedirMudanca = () => {
+    const opts = (cfg.plans || []).map((p) => p.name).filter(Boolean);
+    const lista = opts.length ? "\n• " + opts.join("\n• ") : "";
+    const destino = window.prompt(`Pedir mudança de pacote\nPacote atual: ${dados.pacote || "—"}${lista}\n\nEscreva o pacote desejado:`);
+    if (destino && destino.trim()) abrirPedido("Quero mudar de pacote", `Pacote atual: ${dados.pacote || "—"}. Pacote desejado: ${destino.trim()}.`);
+  };
+  const pedirCancelamento = () => {
+    if (window.confirm("Vamos abrir um pedido para a equipa o contactar, explicar valores pendentes e combinar a devolução dos equipamentos. A conta NÃO é cancelada automaticamente.\n\nConfirmar pedido de cancelamento?"))
+      abrirPedido("Quero cancelar", `Pacote atual: ${dados.pacote || "—"}.`);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* tabela da subscrição (estilo Starlink) */}
+      <div className={panel + " overflow-hidden"}>
+        <div className="hidden sm:grid grid-cols-[1.4fr_1.4fr_auto] gap-4 px-6 py-4 border-b border-line text-faint text-[11px] font-mono uppercase tracking-widest">
+          <span>Subscrição</span><span>Local de serviço</span><span>Estado</span>
+        </div>
+        <div className="grid sm:grid-cols-[1.4fr_1.4fr_auto] gap-2 sm:gap-4 px-6 py-5 sm:items-center">
+          <div className="text-fg font-medium">{dados.pacote || "—"}</div>
+          <div className="text-muted text-sm">{localStr(dados)}</div>
+          <span className={`justify-self-start text-[11px] font-mono uppercase tracking-widest px-3 py-1.5 border ${pillEstado(estado)}`}>{estado}</span>
+        </div>
+      </div>
+
+      {/* detalhes */}
+      <div className={panelPad}>
+        <h3 className="font-display text-xl text-fg mb-5">Detalhes da subscrição</h3>
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-4 py-3.5 border-b border-line/60 last:border-0">
+            <span className="text-muted text-sm">{k}</span>
+            <span className="text-fg font-medium text-right">{v}</span>
+          </div>
+        ))}
+        <p className="text-faint text-xs mt-4">Estes dados são geridos pela Intime. Para os alterar, fale com a equipa.</p>
+      </div>
+
+      {/* pedidos */}
+      <div className={panelPad}>
+        <h3 className="font-display text-xl text-fg mb-5">Pedidos</h3>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <button className={btnGhost} onClick={pedirMudanca}><RefreshCcw size={15} /> Pedir mudança de pacote</button>
+          <button className={btnGhost + " !text-[#ff6b6b] hover:!border-[#ff6b6b]/50"} onClick={pedirCancelamento}><Ban size={15} /> Pedir cancelamento</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===================== CLIENTE: PAGAMENTOS (Billing) ===================== */
+function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: {
+  conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[];
+  histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
+}) {
+  const [metodo, setMetodo] = useState("M-Pesa");
+  const [codigo, setCodigo] = useState("");
+  const [busy, setBusy] = useState(false);
+  const mobileMoney = metodo === "M-Pesa" || metodo === "e-Mola";
+  const numeroMM = (cfg.contacts.whatsapp && cfg.contacts.whatsapp.length) ? cfg.contacts.whatsapp : cfg.contacts.phone;
+  const atraso = emAtraso(estadoStr(dados));
+  const prox = proximaData(dados, new Date());
+  const saldo = atraso ? mtValue(dados.mensalidade) : 0;
+
+  const registar = async (valor: number, extra: Record<string, unknown>) => {
+    let estado = "Pendente";
+    const cod = String(extra.codigo || "");
+    if (cod) {
+      try {
+        const t = await getDoc(doc(db, "transacoesMpesa", cod));
+        if (t.exists()) {
+          const v = typeof t.data().valor === "number" ? (t.data().valor as number) : 0;
+          if (valor === 0 || v + 0.01 >= valor) estado = "Aprovado";
+        }
+      } catch { /* ignora */ }
+    }
+    await addDoc(collection(db, "pagamentos"), {
+      clienteId: dados.clienteId || "", numeroConta: conta, clienteNome: dados.nome || "",
+      mes: monthKey(), valor, metodo, estado, viaPortal: true,
+      ...(dados.promotor ? { promotor: dados.promotor } : {}),
+      data: serverTimestamp(), ...extra,
+    });
+  };
+
+  const submeterCodigo = async () => {
+    const c = codigo.trim().toUpperCase();
+    if (c.length < 6) { showToast("Insira o código da transação."); return; }
+    setBusy(true);
+    try { await registar(mtValue(dados.mensalidade), { codigo: c }); setCodigo(""); showToast("Recebemos o seu código. A equipa vai confirmar em breve."); }
+    catch { showToast("Erro ao submeter. Tente de novo."); }
+    finally { setBusy(false); }
+  };
+
+  const enviarComprovativo = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const r = sRef(storage, `comprovativos/${conta}/${Date.now()}.jpg`);
+      await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
+      const url = await getDownloadURL(r);
+      await registar(mtValue(dados.mensalidade), { comprovativoUrl: url, codigo: codigo.trim().toUpperCase() });
+      setCodigo("");
+      showToast("Pagamento enviado. A aguardar confirmação da Intime.");
+    } catch { showToast("Não foi possível enviar o comprovativo. Tente de novo ou fale com a equipa."); }
+    finally { setBusy(false); }
+  };
+
+  const wa = (numeroMM || "").replace(/\D/g, "");
+  const waUrl = `https://wa.me/${wa}?text=${encodeURIComponent(`Olá, sou o cliente ${conta}. Tenho uma dúvida sobre pagamento.`)}`;
+
+  return (
+    <div className="space-y-6">
+      {/* 3 cartões: saldo · ciclo · pagar via */}
+      <div className="grid md:grid-cols-3 gap-4">
+        <div className={panelPad}>
+          <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Saldo</div>
+          <div className="flex items-center gap-2">
+            <span className="font-display text-4xl text-fg">{saldo.toLocaleString("pt-PT")} <span className="text-lg text-muted">MT</span></span>
+            {!atraso && <CheckCircle2 className="text-accent" size={20} />}
+          </div>
+        </div>
+        <div className={panelPad}>
+          <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Ciclo de faturação</div>
+          <p className="text-fg text-sm">{dados.diaPagamento ? `Pagamento no dia ${String(dados.diaPagamento).replace(/[^0-9]/g, "")} de cada mês.` : "Definido pela Intime."}</p>
+          {prox && <p className="text-muted text-sm mt-1">Próximo: {dataExtenso(prox)}.</p>}
+        </div>
+        <div className={panelPad}>
+          <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Pagar via M-Pesa / e-Mola</div>
+          <p className="font-display text-2xl text-fg">{numeroMM || "(definido pela Intime)"}</p>
+        </div>
+      </div>
+
+      {/* como pagar */}
+      <div className={panelPad}>
+        <h3 className="font-display text-xl text-fg mb-4">Como pagar</h3>
+        <div className="flex flex-wrap gap-2 mb-5">
+          {METODOS.map((m) => (
+            <button key={m} onClick={() => setMetodo(m)}
+              className={`px-4 py-2 text-xs font-mono uppercase tracking-widest border transition-colors ${m === metodo ? "bg-fg text-bg border-fg" : "border-line text-muted hover:text-fg hover:border-accent/50"}`}>{m}</button>
+          ))}
+        </div>
+
+        <div className="border border-dashed border-line p-5 mb-5 text-sm leading-relaxed">
+          {mobileMoney ? (
+            <>
+              <b>{metodo}</b> — envie <b>{dados.mensalidade || ""} MT</b> para:
+              <div className="font-display text-2xl text-fg mt-1">{numeroMM || "(número definido pela Intime)"}</div>
+            </>
+          ) : (
+            "Peça os dados desta forma de pagamento à equipa pelo WhatsApp e, depois de pagar, envie aqui a foto do comprovativo."
+          )}
+        </div>
+
+        {mobileMoney && (
+          <div className="mb-3">
+            <label className={lbl}>Código da transação <span className="normal-case tracking-normal text-faint">(opcional se enviar foto)</span></label>
+            <input className={field + " mb-3"} placeholder="Ex.: CI8R4T2X9P" spellCheck={false} value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+            <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A submeter…" : "Já paguei — confirmar"}</button>
+          </div>
+        )}
+
+        <label className={btnGhost + " cursor-pointer mt-1"}>
+          <Upload size={15} /> Enviar foto do comprovativo
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
+        </label>
+
+        <p className="text-center text-muted text-sm mt-5">
+          Dúvidas sobre o pagamento? <a href={waUrl} target="_blank" rel="noopener" className="underline hover:text-fg">Falar com a equipa no WhatsApp</a>
+        </p>
+      </div>
+
+      {/* faturas / histórico (tabela) */}
+      <div className={panel}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+          <h3 className="font-display text-lg text-fg">Histórico de pagamentos</h3>
+          <span className="font-mono text-[11px] text-faint">{hist.length}</span>
+        </div>
+        {histLoading ? (
+          <p className="text-muted text-sm px-6 py-10 text-center">A carregar…</p>
+        ) : hist.length === 0 ? (
+          <p className="text-faint text-sm px-6 py-12 text-center">Ainda não há pagamentos registados.</p>
+        ) : (
+          <div className="divide-y divide-[var(--line)]">
+            {hist.map(({ id, d }) => {
+              const estado = String(d.estado || "Pendente");
+              const e = estado.toLowerCase();
+              const aprovado = e.includes("aprov") || e.includes("pago");
+              const recusado = e.includes("recus");
+              const color = recusado ? "#ff6b6b" : aprovado ? "var(--accent,#5CF2C8)" : "#f5b948";
+              const Icon = recusado ? XIcon : aprovado ? Check : Clock;
+              const valor = d.valor != null ? `${Math.round(Number(d.valor) || 0)} MT` : "—";
+              return (
+                <div key={id} className="flex items-center gap-4 px-6 py-4">
+                  <div className="w-9 h-9 grid place-items-center border border-line shrink-0" style={{ color }}><Icon size={16} /></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-fg font-medium">{valor}</div>
+                    <div className="text-faint text-xs">{`${d.mes || ""} · ${d.metodo || ""}${d.comprovativoUrl ? " · com foto" : ""}`}</div>
+                    <div className="text-faint text-xs">{fmtTs(d.data)}</div>
+                  </div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border shrink-0" style={{ color, borderColor: color }}>{estado}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== CLIENTE: SUPORTE (Messages) ===================== */
+function ClienteSuporte({ conta, showToast }: { conta: string; showToast: (m: string) => void }) {
+  const [tickets, setTickets] = useState<{ id: string; d: DocumentData }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [tipo, setTipo] = useState(TIPOS_SUPORTE[0]);
+  const [descricao, setDescricao] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    // sem orderBy para não exigir índice composto — ordena no cliente
+    const q = query(collection(db, "suporte"), where("numeroConta", "==", conta));
+    const unsub = onSnapshot(q,
+      (s) => {
+        const arr = s.docs.map((d) => ({ id: d.id, d: d.data() }));
+        arr.sort((a, b) => ((b.d.createdAt?.seconds || 0) - (a.d.createdAt?.seconds || 0)));
+        setTickets(arr); setLoading(false);
+      },
+      () => setLoading(false));
+    return () => unsub();
+  }, [conta]);
+
+  const enviar = async () => {
+    if (!descricao.trim()) { showToast("Descreva o assunto."); return; }
+    setBusy(true);
+    try {
+      await addDoc(collection(db, "suporte"), { numeroConta: conta, tipo, descricao: descricao.trim(), estado: "Recebido", createdAt: serverTimestamp() });
+      setDescricao(""); setOpen(false); showToast("Pedido enviado. A equipa vai responder.");
+    } catch { showToast("Não foi possível enviar. Tente de novo."); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-2 px-6 py-3 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors">
+          <Plus size={15} /> Novo pedido
+        </button>
+      </div>
+
+      {open && (
+        <div className={panelPad + " conta-fade"}>
+          <h3 className="font-display text-xl text-fg mb-5">Abrir pedido de suporte</h3>
+          <div className="mb-4">
+            <label className={lbl}>Assunto</label>
+            <select className={field} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              {TIPOS_SUPORTE.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div className="mb-5">
+            <label className={lbl}>Descrição</label>
+            <textarea className={field + " min-h-[120px] resize-y"} placeholder="Descreva o que se passa…" value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+          </div>
+          <button className={btnPrimary} disabled={busy} onClick={enviar}>{busy ? "A enviar…" : "Enviar pedido"}</button>
+        </div>
+      )}
+
+      <div className={panel}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+          <h3 className="font-display text-lg text-fg">Os meus pedidos</h3>
+          <span className="font-mono text-[11px] text-faint">{tickets.length}</span>
+        </div>
+        {loading ? (
+          <p className="text-muted text-sm px-6 py-10 text-center">A carregar…</p>
+        ) : tickets.length === 0 ? (
+          <p className="text-faint text-sm px-6 py-12 text-center">Ainda não abriu nenhum pedido. Use “Novo pedido” acima.</p>
+        ) : (
+          <div className="divide-y divide-[var(--line)]">
+            {tickets.map(({ id, d }) => {
+              const est = String(d.estado || "Recebido");
+              const fechado = est.toLowerCase().includes("conclu") || est.toLowerCase().includes("resolv") || est.toLowerCase().includes("fechad");
+              return (
+                <div key={id} className="flex items-start justify-between gap-4 px-6 py-4">
+                  <div className="min-w-0">
+                    <div className="text-fg font-medium">{d.tipo || "Pedido"}</div>
+                    {d.descricao && <div className="text-muted text-sm mt-0.5 line-clamp-2">{d.descricao}</div>}
+                    <div className="text-faint text-xs mt-1">{fmtTs(d.createdAt)}</div>
+                  </div>
+                  <span className={`text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border shrink-0 ${fechado ? "text-accent border-accent/40 bg-accent/10" : "text-muted border-line"}`}>{est}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== CLIENTE: DEFINIÇÕES (Settings) ===================== */
+function ClienteDefinicoes({ conta, dados, gEmail, isCliente, isPromotor, showToast, onSair }: {
+  conta: string | null; dados: DocumentData; gEmail: string | null;
+  isCliente: boolean; isPromotor: boolean; showToast: (m: string) => void; onSair: () => void;
+}) {
+  const [wa, setWa] = useState("");
+  const [email, setEmail] = useState("");
+  const [alt, setAlt] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setWa(String(dados.contactoWhatsapp ?? dados.whatsapp ?? ""));
+    setEmail(String(dados.contactoEmail ?? dados.email ?? gEmail ?? ""));
+    setAlt(String(dados.contactoAlternativo ?? ""));
+  }, [dados, gEmail]);
+
+  const guardar = async () => {
+    if (!conta) return;
+    setSaving(true);
+    try {
+      await setDoc(doc(db, "portalContas", conta), {
+        contactoWhatsapp: wa.trim(), contactoEmail: email.trim(), contactoAlternativo: alt.trim(),
+        contactoAtualizadoEm: serverTimestamp(),
+      }, { merge: true });
+      showToast("Contacto atualizado.");
+    } catch { showToast("Não foi possível guardar. Tente de novo."); }
+    finally { setSaving(false); }
+  };
+
+  const profile: [string, string][] = [
+    ["Nome", String(dados.nome || "—")],
+    ["Email", String(dados.contactoEmail || dados.email || gEmail || "—")],
+    ["WhatsApp", String(dados.contactoWhatsapp || dados.whatsapp || "—")],
+    ["Conta", conta || "—"],
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* perfil */}
+      <div className={panelPad}>
+        <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+          <h3 className="font-display text-xl text-fg">Perfil</h3>
+          <div className="flex items-center gap-2">
+            {isCliente && <span className="text-[10px] font-mono uppercase tracking-[0.2em] px-2.5 py-1 border border-line text-muted">Cliente</span>}
+            {isPromotor && <span className="text-[10px] font-mono uppercase tracking-[0.2em] px-2.5 py-1 border border-accent/40 text-accent bg-accent/10">Promotor</span>}
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-x-8">
+          {profile.map(([k, v]) => (
+            <div key={k} className="py-3 border-b border-line/60">
+              <div className="text-faint text-[11px] font-mono uppercase tracking-widest">{k}</div>
+              <div className="text-fg mt-1 break-words">{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* atualizar contacto */}
+      {isCliente && (
+        <div className={panelPad}>
+          <h3 className="font-display text-xl text-fg mb-5">Atualizar contacto</h3>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div><label className={lbl}>Número de WhatsApp</label><input className={field} value={wa} onChange={(e) => setWa(e.target.value)} /></div>
+            <div><label className={lbl}>Email</label><input className={field} value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div className="sm:col-span-2"><label className={lbl}>Contacto alternativo (opcional)</label><input className={field} value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
+          </div>
+          <div className="mt-5 sm:max-w-xs"><button className={btnPrimary} disabled={saving} onClick={guardar}>{saving ? "A guardar…" : "Guardar contacto"}</button></div>
+        </div>
+      )}
+
+      {/* sessão */}
+      <div className={panelPad + " flex items-center justify-between gap-4 flex-wrap"}>
+        <div>
+          <h3 className="font-display text-xl text-fg">Sessão</h3>
+          <p className="text-muted text-sm mt-1">Terminar sessão neste dispositivo.</p>
+        </div>
+        <button onClick={onSair} className="inline-flex items-center gap-2 px-6 py-3 border border-line text-fg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:border-[#ff6b6b]/50 hover:text-[#ff6b6b] transition-colors">
+          <LogOut size={15} /> Sair
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ===================== LEAD: ESTADO DO PEDIDO ===================== */
+function LeadStatus({ lead }: { lead: DocumentData }) {
+  const status = String(lead.status || "novo");
+  const order: Record<string, number> = { novo: 0, contactado: 1, concluido: 2 };
+  const cur = order[status] ?? 0;
+  const passos = [
+    { label: "Pedido recebido", desc: "Recebemos o seu pedido de instalação." },
+    { label: "Em avaliação", desc: "A equipa entra em contacto para confirmar e agendar." },
+    { label: "Instalação concluída", desc: "A sua Starlink fica ativa e a conta abre aqui." },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className={panelPad}>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-1">
+          <h3 className="font-display text-xl text-fg">O seu pedido de instalação</h3>
+          <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-accent/40 text-accent bg-accent/10">Em curso</span>
+        </div>
+        <p className="text-muted text-sm mb-6">{[lead.plano, lead.cidade].filter(Boolean).join(" · ") || "—"}{lead.createdAt ? ` · ${fmtData(lead.createdAt)}` : ""}</p>
+
+        <div className="space-y-5">
+          {passos.map((p, i) => {
+            const feito = i <= cur;
+            return (
+              <div key={i} className="flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className={`w-7 h-7 grid place-items-center rounded-full border ${feito ? "bg-accent text-bg border-accent" : "border-line text-faint"}`}>
+                    {feito ? <Check size={14} /> : <span className="text-[11px] font-mono">{i + 1}</span>}
+                  </div>
+                  {i < passos.length - 1 && <div className={`w-px flex-1 my-1 ${i < cur ? "bg-accent" : "bg-line"}`} style={{ minHeight: 22 }} />}
+                </div>
+                <div className="pb-1">
+                  <div className={`font-medium ${feito ? "text-fg" : "text-muted"}`}>{p.label}</div>
+                  <div className="text-faint text-xs mt-0.5">{p.desc}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="text-faint text-xs text-center">Assim que a Starlink for instalada, esta área passa a mostrar a sua conta, pagamentos e faturas.</p>
+    </div>
+  );
+}
+
+/* ===================== CTA: TORNAR-SE CLIENTE ===================== */
+function CtaCliente() {
+  return (
+    <div className={panelPad + " text-center"}>
+      <Wifi size={26} className="mx-auto mb-4 text-accent" />
+      <h3 className="font-display text-2xl text-fg mb-2">Ainda não tem Starlink connosco?</h3>
+      <p className="text-muted text-sm mb-6 max-w-md mx-auto">Peça a instalação e acompanhe aqui o estado do seu pedido até ficar online.</p>
+      <Link to="/aderir" className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors">
+        Pedir instalação <ArrowRight size={15} />
+      </Link>
+    </div>
+  );
+}
+
+/* ===================== PROMOTOR: PAINEL ===================== */
+function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData }) {
+  const [copied, setCopied] = useState(false);
+  const pct = Number(promo.percentagem) || 8;
+  const stats = promo.stats || {};
+  const leads: DocumentData[] = Array.isArray(promo.leadsResumo) ? promo.leadsResumo : [];
+  const clientes: DocumentData[] = Array.isArray(promo.clientesResumo) ? promo.clientesResumo : [];
+  const nLeads = Number(stats.leads ?? leads.length) || 0;
+  const nClientes = Number(stats.clientes ?? clientes.length) || 0;
+  const comissao = Number(stats.comissao) || 0;
+
+  const link = `${window.location.origin}/p/${codigo}`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
+  };
+
+  const kpis = [
+    { icon: Users, value: nLeads, label: "Leads trazidos" },
+    { icon: UserCheck, value: nClientes, label: "Clientes ativos" },
+    { icon: Wallet, value: `${comissao} MT`, label: "Comissão acumulada", accent: true },
+    { icon: TrendingUp, value: `${pct}%`, label: "Por pagamento" },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((s, i) => (
+          <div key={i} className={`border p-6 ${s.accent ? "border-accent bg-accent/[0.06]" : "border-line bg-card"}`}>
+            <s.icon size={20} className={`mb-4 ${s.accent ? "text-accent" : "text-faint"}`} />
+            <div className={`font-display text-4xl leading-none mb-1 ${s.accent ? "text-accent" : "text-fg"}`}>{s.value}</div>
+            <div className="text-[12.5px] text-muted">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className={panelPad}>
+        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint mb-4">
+          <Link2 size={14} /> O meu link de promotor · código <span className="text-fg">{codigo}</span>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <code className="flex-1 min-w-0 break-all bg-bg border border-line px-4 py-3.5 text-fg text-sm">{link}</code>
+          <button onClick={copy} className="shrink-0 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-widest font-bold hover:bg-accent transition-colors">
+            {copied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
+          </button>
+        </div>
+        <p className="text-faint text-xs mt-3">Partilhe este link. Quem aderir por ele fica associado a si e gera-lhe {pct}% de comissão recorrente enquanto for cliente.</p>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
+        <div className={panel}>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+            <h2 className="font-display text-lg flex items-center gap-2"><UserCheck size={16} className="text-accent" /> Os meus clientes</h2>
+            <span className="font-mono text-[11px] text-faint">{clientes.length}</span>
+          </div>
+          {clientes.length === 0 ? (
+            <p className="text-faint text-sm px-6 py-12 text-center">Assim que um lead seu virar cliente, aparece aqui.</p>
+          ) : (
+            <div className="divide-y divide-[var(--line)]">
+              {clientes.map((c, i) => (
+                <div key={i} className="flex items-center justify-between gap-4 px-6 py-4">
+                  <div className="min-w-0"><div className="text-fg font-medium truncate">{c.nome || "—"}</div><div className="text-xs text-faint">{c.pacote || "—"}</div></div>
+                  <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-1 border border-line text-faint shrink-0">{c.estado || "—"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={panel}>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+            <h2 className="font-display text-lg flex items-center gap-2"><Users size={16} className="text-faint" /> Pedidos que trouxe</h2>
+            <span className="font-mono text-[11px] text-faint">{leads.length}</span>
+          </div>
+          {leads.length === 0 ? (
+            <p className="text-faint text-sm px-6 py-12 text-center">Partilhe o seu link para começar a trazer pedidos.</p>
+          ) : (
+            <div className="divide-y divide-[var(--line)]">
+              {leads.map((l, i) => {
+                const st = String(l.status || "novo");
+                return (
+                  <div key={i} className="flex items-center justify-between gap-4 px-6 py-4">
+                    <div className="min-w-0">
+                      <div className="text-fg font-medium truncate">{l.nome || "—"}</div>
+                      <div className="text-xs text-faint">{[l.plano, l.cidade].filter(Boolean).join(" · ") || "—"} · {fmtData(l.data)}</div>
+                    </div>
+                    <span className={`font-mono text-[9px] uppercase tracking-wider px-2 py-1 shrink-0 ${st === "concluido" ? "bg-accent text-bg" : "border border-line text-faint"}`}>{PROMO_STATUS_LABEL[st] || st}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ===================== PROMOTOR: CONVITE (não é promotor) ===================== */
+function TeaserPromotor({ temGoogle }: { temGoogle: boolean }) {
+  return (
+    <div className={panelPad}>
+      <div className="flex items-start gap-4">
+        <div className="w-10 h-10 grid place-items-center border border-line text-accent shrink-0"><Wallet size={18} /></div>
+        <div>
+          <h3 className="font-display text-xl text-fg mb-1">Ganhe comissões com a Intime</h3>
+          <p className="text-muted text-sm mb-4">Como promotor, ganha uma percentagem por cada pagamento dos clientes que trouxer — de forma recorrente. Ser promotor é por convite da equipa.</p>
+          <Link to="/contacto" className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">
+            <Megaphone size={14} /> Quero ser promotor
+          </Link>
+          {!temGoogle && <p className="text-faint text-xs mt-3">Já é promotor? Entre com Google.</p>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -335,7 +978,7 @@ function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
 
   return (
     <section className="relative min-h-screen w-full grid lg:grid-cols-2 conta-fade">
-      {/* ---- ESQUERDA: imersivo, ecrã inteiro ---- */}
+      {/* ESQUERDA: imersivo */}
       <div className="relative hidden lg:flex flex-col justify-between px-14 xl:px-24 pt-40 pb-16 overflow-hidden bg-card/30 border-r border-line">
         <div className="pointer-events-none absolute -top-40 -right-40 w-[36rem] h-[36rem] rounded-full bg-accent/20 blur-[120px]" />
         <div className="pointer-events-none absolute -bottom-52 -left-32 w-[34rem] h-[34rem] rounded-full bg-accent/10 blur-[120px]" />
@@ -358,7 +1001,7 @@ function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
         <div className="relative font-mono text-[10px] uppercase tracking-[0.3em] text-faint">Intime · Starlink em Moçambique</div>
       </div>
 
-      {/* ---- DIREITA: formulário centrado e espaçoso ---- */}
+      {/* DIREITA: formulário */}
       <div className="relative flex items-center justify-center px-6 sm:px-10 pt-32 pb-20 lg:py-20">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-10">
@@ -408,468 +1051,5 @@ function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
         </div>
       </div>
     </section>
-  );
-}
-
-/* ===================== CLIENTE: PORTAL ===================== */
-function ClientePortal({ conta, dados, hist, histLoading, cfg, showToast }: {
-  conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[];
-  histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
-}) {
-  const [tab, setTab] = useState<"conta" | "pagar">("conta");
-  const estado = String(dados.estado ?? "—");
-  const pillCls = emAtraso(estado) ? "text-[#ff6b6b] border-[#ff6b6b]/40 bg-[#ff6b6b]/10"
-    : estadoOk(estado) ? "text-accent border-accent/40 bg-accent/10"
-    : "text-muted border-line bg-card/40";
-
-  return (
-    <>
-      <div className="flex items-center justify-end mb-4">
-        <span className={`text-[11px] font-mono uppercase tracking-widest px-3 py-1.5 border ${pillCls}`}>{estado}</span>
-      </div>
-
-      <div className="flex gap-2 mb-8 border-b border-line">
-        {([["conta", "Subscrição"], ["pagar", "Pagamentos"]] as const).map(([k, label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className={`px-5 py-3 text-[11px] font-mono uppercase tracking-[0.15em] border-b-2 -mb-px transition-colors ${tab === k ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "conta"
-        ? <TabConta conta={conta} dados={dados} cfg={cfg} showToast={showToast} />
-        : <TabPagar conta={conta} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />}
-    </>
-  );
-}
-
-/* ---------- TAB: SUBSCRIÇÃO ---------- */
-function TabConta({ conta, dados, cfg, showToast }: {
-  conta: string; dados: DocumentData; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
-}) {
-  const [wa, setWa] = useState("");
-  const [email, setEmail] = useState("");
-  const [alt, setAlt] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    setWa(String(dados.contactoWhatsapp ?? dados.whatsapp ?? ""));
-    setEmail(String(dados.contactoEmail ?? dados.email ?? ""));
-    setAlt(String(dados.contactoAlternativo ?? ""));
-  }, [dados]);
-
-  const prox = proximaData(dados, new Date());
-  const rows: [string, string][] = [
-    ["Titular", String(dados.nome ?? "—")],
-    ["Conta", conta],
-    ["Pacote", String(dados.pacote ?? "—")],
-    ["Mensalidade", dados.mensalidade ? `${dados.mensalidade} MT` : "—"],
-    ["Dia de pagamento", dados.diaPagamento ? `Dia ${String(dados.diaPagamento).replace(/[^0-9]/g, "")}` : "—"],
-    ["Próximo pagamento", prox ? dataExtenso(prox) : "—"],
-  ];
-
-  const guardar = async () => {
-    setSaving(true);
-    try {
-      await setDoc(doc(db, "portalContas", conta), {
-        contactoWhatsapp: wa.trim(), contactoEmail: email.trim(), contactoAlternativo: alt.trim(),
-        contactoAtualizadoEm: serverTimestamp(),
-      }, { merge: true });
-      showToast("Contacto atualizado.");
-    } catch { showToast("Não foi possível guardar. Tente de novo."); }
-    finally { setSaving(false); }
-  };
-
-  const abrirPedido = async (tipo: string, descricao: string) => {
-    try {
-      await addDoc(collection(db, "suporte"), { numeroConta: conta, tipo, descricao, estado: "Recebido", createdAt: serverTimestamp() });
-      showToast(`Pedido enviado: ${tipo}. A equipa vai contactá-lo.`);
-    } catch { showToast("Não foi possível enviar. Tente de novo."); }
-  };
-
-  const pedirMudanca = () => {
-    const opts = (cfg.plans || []).map((p) => p.name).filter(Boolean);
-    const lista = opts.length ? "\n• " + opts.join("\n• ") : "";
-    const destino = window.prompt(`Pedir mudança de pacote\nPacote atual: ${dados.pacote || "—"}${lista}\n\nEscreva o pacote desejado:`);
-    if (destino && destino.trim()) abrirPedido("Quero mudar de pacote", `Pacote atual: ${dados.pacote || "—"}. Pacote desejado: ${destino.trim()}.`);
-  };
-  const pedirCancelamento = () => {
-    if (window.confirm("Vamos abrir um pedido para a equipa o contactar, explicar valores pendentes e combinar a devolução dos equipamentos. A conta NÃO é cancelada automaticamente.\n\nConfirmar pedido de cancelamento?"))
-      abrirPedido("Quero cancelar", `Pacote atual: ${dados.pacote || "—"}.`);
-  };
-
-  return (
-    <div className="grid lg:grid-cols-2 gap-6 items-start">
-      <div className={cardCls + " lg:row-span-2"}>
-        <h3 className="font-display text-xl text-fg mb-5">Detalhes da subscrição</h3>
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4 py-3.5 border-b border-line/60 last:border-0">
-            <span className="text-muted text-sm">{k}</span>
-            <span className="text-fg font-medium text-right">{v}</span>
-          </div>
-        ))}
-        <p className="text-faint text-xs mt-4">Estes dados são geridos pela Intime. Para os alterar, fale com a equipa.</p>
-      </div>
-
-      <div className={cardCls}>
-        <h3 className="font-display text-xl text-fg mb-5">Atualizar contacto</h3>
-        <div className="mb-4"><label className={lbl}>Número de WhatsApp</label><input className={field} value={wa} onChange={(e) => setWa(e.target.value)} /></div>
-        <div className="mb-4"><label className={lbl}>Email (opcional)</label><input className={field} value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-        <div className="mb-5"><label className={lbl}>Contacto alternativo (opcional)</label><input className={field} value={alt} onChange={(e) => setAlt(e.target.value)} /></div>
-        <button className={btnPrimary} disabled={saving} onClick={guardar}>{saving ? "A guardar…" : "Guardar contacto"}</button>
-      </div>
-
-      <div className={cardCls}>
-        <h3 className="font-display text-xl text-fg mb-5">Pedidos</h3>
-        <div className="space-y-3">
-          <button className={btnGhost} onClick={pedirMudanca}><RefreshCcw size={15} /> Pedir mudança de pacote</button>
-          <button className={btnGhost + " !text-[#ff6b6b] hover:!border-[#ff6b6b]/50"} onClick={pedirCancelamento}><Ban size={15} /> Pedir cancelamento</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------- TAB: PAGAMENTOS ---------- */
-function TabPagar({ conta, dados, hist, histLoading, cfg, showToast }: {
-  conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[];
-  histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
-}) {
-  const [metodo, setMetodo] = useState("M-Pesa");
-  const [codigo, setCodigo] = useState("");
-  const [busy, setBusy] = useState(false);
-  const mobileMoney = metodo === "M-Pesa" || metodo === "e-Mola";
-  const numeroMM = (cfg.contacts.whatsapp && cfg.contacts.whatsapp.length) ? cfg.contacts.whatsapp : cfg.contacts.phone;
-  const atraso = emAtraso(estadoStr(dados));
-
-  const registar = async (valor: number, extra: Record<string, unknown>) => {
-    let estado = "Pendente";
-    const cod = String(extra.codigo || "");
-    if (cod) {
-      try {
-        const t = await getDoc(doc(db, "transacoesMpesa", cod));
-        if (t.exists()) {
-          const v = typeof t.data().valor === "number" ? (t.data().valor as number) : 0;
-          if (valor === 0 || v + 0.01 >= valor) estado = "Aprovado";
-        }
-      } catch { /* ignora */ }
-    }
-    await addDoc(collection(db, "pagamentos"), {
-      clienteId: dados.clienteId || "", numeroConta: conta, clienteNome: dados.nome || "",
-      mes: monthKey(), valor, metodo, estado, viaPortal: true,
-      ...(dados.promotor ? { promotor: dados.promotor } : {}),
-      data: serverTimestamp(), ...extra,
-    });
-  };
-
-  const submeterCodigo = async () => {
-    const c = codigo.trim().toUpperCase();
-    if (c.length < 6) { showToast("Insira o código da transação."); return; }
-    setBusy(true);
-    try { await registar(mtValue(dados.mensalidade), { codigo: c }); setCodigo(""); showToast("Recebemos o seu código. A equipa vai confirmar em breve."); }
-    catch { showToast("Erro ao submeter. Tente de novo."); }
-    finally { setBusy(false); }
-  };
-
-  const enviarComprovativo = async (file?: File) => {
-    if (!file) return;
-    setBusy(true);
-    try {
-      const r = sRef(storage, `comprovativos/${conta}/${Date.now()}.jpg`);
-      await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
-      const url = await getDownloadURL(r);
-      await registar(mtValue(dados.mensalidade), { comprovativoUrl: url, codigo: codigo.trim().toUpperCase() });
-      setCodigo("");
-      showToast("Pagamento enviado. A aguardar confirmação da Intime.");
-    } catch { showToast("Não foi possível enviar o comprovativo. Tente de novo ou fale com a equipa."); }
-    finally { setBusy(false); }
-  };
-
-  const wa = (numeroMM || "").replace(/\D/g, "");
-  const waUrl = `https://wa.me/${wa}?text=${encodeURIComponent(`Olá, sou o cliente ${conta}. Tenho uma dúvida sobre pagamento.`)}`;
-
-  return (
-    <div className="space-y-6">
-      <div className={cardCls + " bg-card/50 flex flex-wrap items-end justify-between gap-4"}>
-        <div>
-          <div className="text-faint text-[11px] font-mono uppercase tracking-widest">Valor a pagar este mês</div>
-          <div className="font-display text-6xl text-fg mt-1">{dados.mensalidade ?? "—"} <span className="text-2xl text-muted">MT</span></div>
-        </div>
-        {atraso && <p className="text-[#ff6b6b] text-sm">⚠ Conta em atraso — regularize assim que possível.</p>}
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6 items-start">
-      <div className={cardCls}>
-        <h3 className="font-display text-xl text-fg mb-4">Como pagar</h3>
-        <div className="flex flex-wrap gap-2 mb-5">
-          {METODOS.map((m) => (
-            <button key={m} onClick={() => setMetodo(m)}
-              className={`px-4 py-2 text-xs font-mono uppercase tracking-widest border transition-colors ${m === metodo ? "bg-fg text-bg border-fg" : "border-line text-muted hover:text-fg hover:border-accent/50"}`}>
-              {m}
-            </button>
-          ))}
-        </div>
-
-        <div className="border border-dashed border-line p-5 mb-5 text-sm leading-relaxed">
-          {mobileMoney ? (
-            <>
-              <b>{metodo}</b> — envie <b>{dados.mensalidade || ""} MT</b> para:
-              <div className="font-display text-2xl text-fg mt-1">{numeroMM || "(número definido pela Intime)"}</div>
-            </>
-          ) : (
-            "Peça os dados desta forma de pagamento à equipa pelo WhatsApp e, depois de pagar, envie aqui a foto do comprovativo."
-          )}
-        </div>
-
-        {mobileMoney && (
-          <div className="mb-3">
-            <label className={lbl}>Código da transação <span className="normal-case tracking-normal text-faint">(opcional se enviar foto)</span></label>
-            <input className={field + " mb-3"} placeholder="Ex.: CI8R4T2X9P" spellCheck={false} value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-            <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A submeter…" : "Já paguei — confirmar"}</button>
-          </div>
-        )}
-
-        <label className={btnGhost + " cursor-pointer mt-1"}>
-          <Upload size={15} /> Enviar foto do comprovativo
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
-        </label>
-
-        <p className="text-center text-muted text-sm mt-5">
-          Dúvidas sobre o pagamento? <a href={waUrl} target="_blank" rel="noopener" className="underline hover:text-fg">Falar com a equipa no WhatsApp</a>
-        </p>
-      </div>
-
-      <div className={cardCls}>
-        <h3 className="font-display text-xl text-fg mb-4">Histórico de pagamentos</h3>
-        {histLoading ? (
-          <p className="text-muted text-sm">A carregar…</p>
-        ) : hist.length === 0 ? (
-          <p className="text-muted text-sm">Ainda não há pagamentos registados.</p>
-        ) : (
-          <div>
-            {hist.map(({ id, d }) => {
-              const estado = String(d.estado || "Pendente");
-              const e = estado.toLowerCase();
-              const aprovado = e.includes("aprov") || e.includes("pago");
-              const recusado = e.includes("recus");
-              const color = recusado ? "#ff6b6b" : aprovado ? "var(--accent,#5CF2C8)" : "#f5b948";
-              const Icon = recusado ? XIcon : aprovado ? Check : Clock;
-              const valor = d.valor != null ? `${Math.round(Number(d.valor) || 0)} MT` : "—";
-              return (
-                <div key={id} className="flex items-center gap-4 py-3.5 border-b border-line/60 last:border-0">
-                  <div className="w-9 h-9 grid place-items-center border border-line shrink-0" style={{ color }}><Icon size={16} /></div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-fg font-medium">{valor}</div>
-                    <div className="text-faint text-xs">{`${d.mes || ""} · ${d.metodo || ""}${d.comprovativoUrl ? " · com foto" : ""}`}</div>
-                    <div className="text-faint text-xs">{fmtTs(d.data)}</div>
-                  </div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border" style={{ color, borderColor: color }}>{estado}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-      </div>
-    </div>
-  );
-}
-
-/* ===================== LEAD: ESTADO DO PEDIDO ===================== */
-function LeadStatus({ lead }: { lead: DocumentData }) {
-  const status = String(lead.status || "novo");
-  const order: Record<string, number> = { novo: 0, contactado: 1, concluido: 2 };
-  const cur = order[status] ?? 0;
-  const passos = [
-    { label: "Pedido recebido", desc: "Recebemos o seu pedido de instalação." },
-    { label: "Em avaliação", desc: "A equipa entra em contacto para confirmar e agendar." },
-    { label: "Instalação concluída", desc: "A sua Starlink fica ativa e a conta abre aqui." },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <div className={cardCls}>
-        <div className="flex items-center justify-between gap-4 flex-wrap mb-1">
-          <h3 className="font-display text-xl text-fg">O seu pedido de instalação</h3>
-          <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-accent/40 text-accent bg-accent/10">Em curso</span>
-        </div>
-        <p className="text-muted text-sm mb-6">{[lead.plano, lead.cidade].filter(Boolean).join(" · ") || "—"}{lead.createdAt ? ` · ${fmtData(lead.createdAt)}` : ""}</p>
-
-        <div className="space-y-5">
-          {passos.map((p, i) => {
-            const feito = i <= cur;
-            return (
-              <div key={i} className="flex gap-4">
-                <div className="flex flex-col items-center">
-                  <div className={`w-7 h-7 grid place-items-center rounded-full border ${feito ? "bg-accent text-bg border-accent" : "border-line text-faint"}`}>
-                    {feito ? <Check size={14} /> : <span className="text-[11px] font-mono">{i + 1}</span>}
-                  </div>
-                  {i < passos.length - 1 && <div className={`w-px flex-1 my-1 ${i < cur ? "bg-accent" : "bg-line"}`} style={{ minHeight: 22 }} />}
-                </div>
-                <div className="pb-1">
-                  <div className={`font-medium ${feito ? "text-fg" : "text-muted"}`}>{p.label}</div>
-                  <div className="text-faint text-xs mt-0.5">{p.desc}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <p className="text-faint text-xs text-center">Assim que a Starlink for instalada, esta área passa a mostrar a sua conta, pagamentos e faturas.</p>
-    </div>
-  );
-}
-
-/* ===================== CTA: TORNAR-SE CLIENTE ===================== */
-function CtaCliente() {
-  return (
-    <div className={cardCls + " text-center"}>
-      <Wifi size={26} className="mx-auto mb-4 text-accent" />
-      <h3 className="font-display text-2xl text-fg mb-2">Ainda não tem Starlink connosco?</h3>
-      <p className="text-muted text-sm mb-6 max-w-md mx-auto">Peça a instalação e acompanhe aqui o estado do seu pedido até ficar online.</p>
-      <Link to="/aderir" className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors">
-        Pedir instalação <ArrowRight size={15} />
-      </Link>
-    </div>
-  );
-}
-
-/* CTA fina: para promotores (papel principal) — convida a ter Starlink sem dominar a página */
-function CtaClienteSlim() {
-  return (
-    <div className="border border-line p-5 bg-card/20 flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex items-center gap-3">
-        <Wifi size={18} className="text-accent shrink-0" />
-        <span className="text-muted text-sm">Também quer Starlink em casa ou no negócio?</span>
-      </div>
-      <Link to="/aderir" className="inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.2em] font-bold text-fg hover:text-accent transition-colors">
-        Pedir instalação <ArrowRight size={14} />
-      </Link>
-    </div>
-  );
-}
-
-/* ===================== PROMOTOR: PAINEL ===================== */
-function PromotorPainel({ codigo, promo }: { codigo: string; promo: DocumentData }) {
-  const [copied, setCopied] = useState(false);
-  const pct = Number(promo.percentagem) || 8;
-  const stats = promo.stats || {};
-  const leads: DocumentData[] = Array.isArray(promo.leadsResumo) ? promo.leadsResumo : [];
-  const clientes: DocumentData[] = Array.isArray(promo.clientesResumo) ? promo.clientesResumo : [];
-  const nLeads = Number(stats.leads ?? leads.length) || 0;
-  const nClientes = Number(stats.clientes ?? clientes.length) || 0;
-  const comissao = Number(stats.comissao) || 0;
-  const link = `${window.location.origin}/p/${codigo}`;
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* */ }
-  };
-
-  const kpis = [
-    { icon: Users, value: nLeads, label: "Leads trazidos" },
-    { icon: UserCheck, value: nClientes, label: "Clientes ativos" },
-    { icon: Wallet, value: `${comissao} MT`, label: "Comissão acumulada", accent: true },
-    { icon: TrendingUp, value: `${pct}%`, label: "Por pagamento" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      {/* ---- KPIs (estilo painel) ---- */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpis.map((s, i) => (
-          <div key={i} className={`border p-6 ${s.accent ? "border-accent bg-accent/[0.06]" : "border-line bg-card"}`}>
-            <s.icon size={20} className={`mb-4 ${s.accent ? "text-accent" : "text-faint"}`} />
-            <div className={`font-display text-4xl leading-none mb-1 ${s.accent ? "text-accent" : "text-fg"}`}>{s.value}</div>
-            <div className="text-[12.5px] text-muted">{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* ---- Link em destaque (ferramenta principal do promotor) ---- */}
-      <div className="border border-line bg-card p-6 md:p-8">
-        <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint mb-4">
-          <Link2 size={14} /> O meu link de promotor · código <span className="text-fg">{codigo}</span>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <code className="flex-1 min-w-0 break-all bg-bg border border-line px-4 py-3.5 text-fg text-sm">{link}</code>
-          <button onClick={copy} className="shrink-0 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-widest font-bold hover:bg-accent transition-colors">
-            {copied ? <><Check size={14} /> Copiado</> : <><Copy size={14} /> Copiar link</>}
-          </button>
-        </div>
-        <p className="text-faint text-xs mt-3">Partilhe este link. Quem aderir por ele fica associado a si e gera-lhe {pct}% de comissão recorrente enquanto for cliente.</p>
-      </div>
-
-      {/* ---- Painéis lado a lado ---- */}
-      <div className="grid lg:grid-cols-2 gap-6 items-start">
-        {/* Clientes */}
-        <div className="border border-line bg-card">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
-            <h2 className="font-display text-lg flex items-center gap-2"><UserCheck size={16} className="text-accent" /> Os meus clientes</h2>
-            <span className="font-mono text-[11px] text-faint">{clientes.length}</span>
-          </div>
-          {clientes.length === 0 ? (
-            <p className="text-faint text-sm px-6 py-12 text-center">Assim que um lead seu virar cliente, aparece aqui.</p>
-          ) : (
-            <div className="divide-y divide-[var(--line)]">
-              {clientes.map((c, i) => (
-                <div key={i} className="flex items-center justify-between gap-4 px-6 py-4">
-                  <div className="min-w-0"><div className="text-fg font-medium truncate">{c.nome || "—"}</div><div className="text-xs text-faint">{c.pacote || "—"}</div></div>
-                  <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-1 border border-line text-faint shrink-0">{c.estado || "—"}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pedidos */}
-        <div className="border border-line bg-card">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
-            <h2 className="font-display text-lg flex items-center gap-2"><Users size={16} className="text-faint" /> Pedidos que trouxe</h2>
-            <span className="font-mono text-[11px] text-faint">{leads.length}</span>
-          </div>
-          {leads.length === 0 ? (
-            <p className="text-faint text-sm px-6 py-12 text-center">Partilhe o seu link para começar a trazer pedidos.</p>
-          ) : (
-            <div className="divide-y divide-[var(--line)]">
-              {leads.map((l, i) => {
-                const st = String(l.status || "novo");
-                return (
-                  <div key={i} className="flex items-center justify-between gap-4 px-6 py-4">
-                    <div className="min-w-0">
-                      <div className="text-fg font-medium truncate">{l.nome || "—"}</div>
-                      <div className="text-xs text-faint">{[l.plano, l.cidade].filter(Boolean).join(" · ") || "—"} · {fmtData(l.data)}</div>
-                    </div>
-                    <span className={`font-mono text-[9px] uppercase tracking-wider px-2 py-1 shrink-0 ${st === "concluido" ? "bg-accent text-bg" : "border border-line text-faint"}`}>{PROMO_STATUS_LABEL[st] || st}</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ===================== PROMOTOR: CONVITE (não é promotor) ===================== */
-function TeaserPromotor({ temGoogle }: { temGoogle: boolean }) {
-  return (
-    <div className={cardCls}>
-      <div className="flex items-start gap-4">
-        <div className="w-10 h-10 grid place-items-center border border-line text-accent shrink-0"><Wallet size={18} /></div>
-        <div>
-          <h3 className="font-display text-xl text-fg mb-1">Ganhe comissões com a Intime</h3>
-          <p className="text-muted text-sm mb-4">
-            Como promotor, ganha uma percentagem por cada pagamento dos clientes que trouxer — de forma recorrente. Ser promotor é por convite da equipa.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link to="/contacto" className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">
-              <MessageCircle size={14} /> Quero ser promotor
-            </Link>
-            {!temGoogle && <span className="text-faint text-xs self-center">Já é promotor? Entre com Google.</span>}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
