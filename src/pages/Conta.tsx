@@ -75,6 +75,18 @@ function pillEstado(estado: string) {
     : "text-muted border-line bg-card/40";
 }
 
+// Janela de "em processamento": há pagamento aprovado recente mas a conta ainda
+// está em atraso (a aguardar recarregamento da Starlink). Devolve o instante-alvo
+// estimado do recarregamento (ou null se não aplicável).
+const RECARGA_MIN = 30;
+function processamentoTarget(dados: DocumentData, hist: { id: string; d: DocumentData }[]): number | null {
+  if (!emAtraso(estadoStr(dados))) return null;
+  const aprov = hist.find((h) => { const e = String(h.d.estado || "").toLowerCase(); return e.includes("aprov") || e.includes("pago"); });
+  const ts = aprov?.d.data instanceof Timestamp ? aprov.d.data.toMillis() : 0;
+  if (!ts || (Date.now() - ts) > 1000 * 60 * 60 * 48) return null;
+  return ts + 1000 * 60 * RECARGA_MIN;
+}
+
 const PROMO_STATUS_LABEL: Record<string, string> = { novo: "Novo", contactado: "Contactado", concluido: "Cliente" };
 const TIPOS_SUPORTE = ["Falha de internet", "Internet lenta", "Problema no pagamento", "Mudança de morada", "Equipamento", "Outro assunto"];
 
@@ -212,7 +224,7 @@ export default function Conta() {
 
   const content = (() => {
     switch (active) {
-      case "inicio": return <ClienteHome dados={dados} go={setSecao} isPromotor={isPromotor} />;
+      case "inicio": return <ClienteHome dados={dados} hist={hist} go={setSecao} isPromotor={isPromotor} />;
       case "subscricao": return <ClienteSubscricao conta={conta!} dados={dados} cfg={cfg} showToast={showToast} />;
       case "pagamentos": return <ClientePagamentos conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />;
       case "suporte": return <ClienteSuporte conta={conta!} showToast={showToast} />;
@@ -298,8 +310,35 @@ function Toast({ msg }: { msg: string }) {
   );
 }
 
+/* ---------- banner "em processamento" com contagem decrescente ---------- */
+function ProcessamentoBanner({ target }: { target: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []);
+  const ms = Math.max(0, target - now);
+  const mm = Math.floor(ms / 60000), ss = Math.floor((ms % 60000) / 1000);
+  const passou = now >= target;
+  return (
+    <div className="border border-accent/40 bg-accent/[0.06] p-6 md:p-8 conta-fade">
+      <div className="flex items-center gap-3 mb-3">
+        <RefreshCcw size={20} className="text-accent animate-spin" />
+        <h3 className="font-display text-xl text-fg">O seu pedido está a ser processado</h3>
+      </div>
+      <p className="text-muted text-sm">Recebemos o seu pagamento. Estamos a recarregar a sua internet — não precisa de fazer mais nada.</p>
+      {!passou ? (
+        <div className="mt-4 flex items-end gap-3">
+          <span className="font-display text-5xl text-accent tabular-nums leading-none">{String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}</span>
+          <span className="text-faint text-[11px] mb-1.5 font-mono uppercase tracking-widest">tempo estimado</span>
+        </div>
+      ) : (
+        <p className="text-muted text-sm mt-3">Está quase a concluir — por vezes demora um pouco mais. Se precisar, fale connosco pelo WhatsApp.</p>
+      )}
+    </div>
+  );
+}
+
 /* ===================== CLIENTE: INÍCIO (Home) ===================== */
-function ClienteHome({ dados, go, isPromotor }: { dados: DocumentData; go: (k: string) => void; isPromotor: boolean }) {
+function ClienteHome({ dados, hist, go, isPromotor }: { dados: DocumentData; hist: { id: string; d: DocumentData }[]; go: (k: string) => void; isPromotor: boolean }) {
+  const alvo = processamentoTarget(dados, hist);
   const estado = String(dados.estado ?? "—");
   const atraso = emAtraso(estado);
   const prox = proximaData(dados, new Date());
@@ -315,6 +354,8 @@ function ClienteHome({ dados, go, isPromotor }: { dados: DocumentData; go: (k: s
 
   return (
     <div className="space-y-6">
+      {alvo && <ProcessamentoBanner target={alvo} />}
+
       {/* Saldo / próximo pagamento */}
       <div className={panelPad}>
         <div className="flex items-end justify-between gap-6 flex-wrap">
@@ -438,9 +479,12 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
   const atraso = emAtraso(estadoStr(dados));
   const prox = proximaData(dados, new Date());
   const saldo = atraso ? mtValue(dados.mensalidade) : 0;
+  const alvo = processamentoTarget(dados, hist);
 
   return (
     <div className="space-y-6">
+      {alvo && <ProcessamentoBanner target={alvo} />}
+
       {/* resumo: saldo + ciclo */}
       <div className="grid md:grid-cols-2 gap-4">
         <div className={panelPad + (atraso ? " border-[#ff6b6b]/40" : "")}>
@@ -458,8 +502,10 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
         </div>
       </div>
 
-      {/* PAGAR — só disponível quando há dívida */}
-      {atraso
+      {/* PAGAR — só disponível quando há dívida e não está já em processamento */}
+      {alvo
+        ? null
+        : atraso
         ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} showToast={showToast} />
         : (
           <div className={panelPad + " text-center"}>
