@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Boxes, Phone, Quote, FileText, Users, Megaphone } from "lucide-react";
+import { Boxes, Phone, Quote, FileText, Users, Megaphone, Wallet } from "lucide-react";
 
 const SUB = [
   { to: "/admin/config", end: true, label: "Pacotes", icon: Boxes },
   { to: "/admin/config/contactos", label: "Contactos & Hero", icon: Phone },
+  { to: "/admin/config/pagamentos", label: "Pagamentos", icon: Wallet },
   { to: "/admin/config/frases", label: "Frases", icon: Quote },
   { to: "/admin/config/contrato", label: "Contrato", icon: FileText },
   { to: "/admin/config/promotores", label: "Promotores", icon: Megaphone },

@@ -20,12 +20,20 @@ export type Plan = {
   speed?: string;        // opcional / legado
 };
 
+export type PaymentMethod = {
+  tipo: string;       // "M-Pesa" | "e-Mola" | "Banco" | ...
+  nome?: string;      // titular / nome da conta de pagamento
+  numero?: string;    // número (carteira) ou conta/IBAN para onde transferir
+  ativo?: boolean;    // aparece (ou não) na lista do cliente
+};
+
 export type SiteConfig = {
   contacts: { email: string; whatsapp: string; phone: string };
   hero: { priceLabel: string; price: string; unit: string };
   plans: Plan[];
   contract: string;
   taglines: string[];
+  metodosPagamento: PaymentMethod[];
 };
 
 export const DEFAULT_TAGLINES = [
@@ -163,6 +171,7 @@ export const DEFAULT_CONFIG: SiteConfig = {
   ],
   contract: DEFAULT_CONTRACT,
   taglines: DEFAULT_TAGLINES,
+  metodosPagamento: [],
 };
 
 export const CONFIG_REF = () => doc(db, "siteConfig", "starlink");
@@ -182,6 +191,7 @@ export function useSiteConfig(): SiteConfig {
             plans: data.plans && data.plans.length ? data.plans : DEFAULT_CONFIG.plans,
             contract: data.contract || DEFAULT_CONFIG.contract,
             taglines: data.taglines && data.taglines.length ? data.taglines : DEFAULT_CONFIG.taglines,
+            metodosPagamento: Array.isArray(data.metodosPagamento) ? data.metodosPagamento : DEFAULT_CONFIG.metodosPagamento,
           });
         }
       },

@@ -430,16 +430,10 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
   conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[];
   histLoading: boolean; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
 }) {
-  // métodos de pagamento geridos pelo admin (siteConfig/pagamentos); default = M-Pesa
-  const [cfgMetodos, setCfgMetodos] = useState<MetodoPag[] | null>(null);
-  useEffect(() => onSnapshot(doc(db, "siteConfig", "pagamentos"), (s) => {
-    const arr = s.exists() && Array.isArray((s.data() as DocumentData).metodos)
-      ? ((s.data() as DocumentData).metodos as MetodoPag[]).filter((m) => m && m.ativo !== false) : null;
-    setCfgMetodos(arr && arr.length ? arr : null);
-  }, () => setCfgMetodos(null)), []);
-
+  // métodos de pagamento geridos pelo admin (cfg.metodosPagamento); default = M-Pesa
   const numeroMM = (cfg.contacts.whatsapp && cfg.contacts.whatsapp.length) ? cfg.contacts.whatsapp : cfg.contacts.phone;
-  const metodos: MetodoPag[] = cfgMetodos ?? [{ tipo: "M-Pesa", nome: "Intime", numero: numeroMM }];
+  const ativos = (cfg.metodosPagamento || []).filter((m) => m && m.ativo !== false && (m.tipo || "").trim());
+  const metodos: MetodoPag[] = ativos.length ? ativos : [{ tipo: "M-Pesa", nome: "Intime", numero: numeroMM }];
 
   const atraso = emAtraso(estadoStr(dados));
   const prox = proximaData(dados, new Date());

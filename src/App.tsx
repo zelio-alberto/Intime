@@ -22,6 +22,8 @@ import Frases from './admin/Frases';
 import Contrato from './admin/Contrato';
 import Membros from './admin/Membros';
 import Promotores from './admin/Promotores';
+import Pagamentos from './admin/Pagamentos';
+import Transacoes from './admin/Transacoes';
 
 export default function App() {
   return (
@@ -47,9 +49,11 @@ export default function App() {
             <Route index element={<Pedidos />} />
             <Route path="mensagens" element={<Mensagens />} />
           </Route>
+          <Route path="transacoes" element={<Transacoes />} />
           <Route path="config" element={<ConfigLayout />}>
             <Route index element={<Pacotes />} />
             <Route path="contactos" element={<Contactos />} />
+            <Route path="pagamentos" element={<Pagamentos />} />
             <Route path="frases" element={<Frases />} />
             <Route path="contrato" element={<Contrato />} />
             <Route path="promotores" element={<Promotores />} />
