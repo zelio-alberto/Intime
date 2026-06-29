@@ -1,109 +1,259 @@
 rules_version = '2';
-// =============================================================================
-// Intime — regras Firestore (projeto zuma-1fec6)
-// Publicar em: Consola Firebase → Firestore → Regras (colar e Publicar)
-// ou via CLI: firebase deploy --only firestore:rules
-//
-// Notas de autenticação:
-//  • App do cliente (Flutter) e gateway usam Auth ANÓNIMA.
-//  • Portal web: login Google (tem email) OU nº de conta → agora também faz
-//    sign-in ANÓNIMO, por isso request.auth != null em ambos os casos.
-//  • Admin = email principal OU consta em starlinkAdmins/{email}.
-// =============================================================================
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function authed() { return request.auth != null; }
-    function isAdmin() {
-      return request.auth != null && (
-        request.auth.token.email == "zelio.a.chirindza@gmail.com" ||
+    // Utilizadores autorizados (admins) - só o admin master pode gerir
+    match /authorizedUsers/{document} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email == 'zelio.a.chirindza@gmail.com';
+    }
+
+    // Produtos
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Serviços
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Pedidos
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Solicitações
+    match /requests/{requestId} {
+      allow read, write: if true;
+    }
+
+    // Configurações
+    match /settings/{document} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Utilizadores
+    match /users/{userId} {
+      allow read, write: if request.auth != null;
+      match /notifications/{notificationId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Perfis de utilizadores
+    match /profiles/{profileId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Contadores
+    match /counters/{counterId} {
+      allow read, write: if true;
+    }
+
+    // Analytics
+    match /analytics/{document} {
+      allow read, write: if true;
+    }
+
+    // ===== INTIME (site Starlink) =====
+    match /siteConfig/{document} {
+      allow read: if true;
+      allow write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
         exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
       );
     }
-    // o cliente só pode tocar nestes campos de contacto em portalContas:
-    function soContacto() {
-      return request.resource.data.diff(resource.data).affectedKeys()
-        .hasOnly(['contactoWhatsapp', 'contactoAlternativo', 'contactoAtualizadoEm']);
-    }
 
-    // ---------- Config pública do site (inclui metodosPagamento) ----------
-    match /siteConfig/{doc} {
-      allow read: if true;            // o site e o portal leem (preços, métodos…)
-      allow write: if isAdmin();
-    }
-    match /appConfig/{doc} {
-      allow read: if authed();        // chaves (ex.: Groq) — só autenticados
-      allow write: if isAdmin();
-    }
     match /starlinkAdmins/{email} {
-      allow read: if authed();
-      allow write: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.email == 'zelio.a.chirindza@gmail.com';
     }
 
-    // ---------- Geridos pela equipa ----------
-    match /clientes/{id}   { allow read: if authed(); allow write: if isAdmin(); }
-    match /kits/{id}       { allow read: if authed(); allow write: if isAdmin(); }
-    match /contratos/{id}  { allow read: if authed(); allow write: if isAdmin(); }
-    match /movimentos/{id} { allow read, write: if isAdmin(); }
-    match /counters/{id}   { allow read, write: if isAdmin(); }
-
-    // ---------- Portal do cliente ----------
-    match /portalEmails/{email} {
-      allow get: if authed();
-      allow list, write: if isAdmin();
-    }
-    match /portalContas/{conta} {
-      allow get: if authed();                 // o cliente lê a sua conta
-      allow list: if isAdmin();
-      allow create, delete: if isAdmin();
-      // a equipa muda tudo; o cliente só os campos de contacto
-      allow update: if isAdmin() || (authed() && soContacto());
-    }
-
-    // ---------- Pagamentos (cliente cria; equipa gere) ----------
-    match /pagamentos/{id} {
-      allow create: if authed();
-      allow read: if authed();
-      allow update, delete: if isAdmin();
-    }
-
-    // ---------- Transações M-Pesa/e-Mola (gateway escreve) ----------
-    match /transacoesMpesa/{id} {
-      allow create: if true;                  // gateway (anónimo) grava SMS
-      allow get: if authed();                 // cliente confirma por código
-      allow list, update, delete: if isAdmin();
-    }
-
-    // ---------- Leads / suporte / mensagens ----------
     match /inscricoes/{id} {
       allow create: if true;
-      allow read: if isAdmin() ||
-        (authed() && request.auth.token.email != null &&
-         resource.data.email == request.auth.token.email.lower());
-      allow update, delete: if isAdmin();
-    }
-    match /suporte/{id} {
-      allow create: if authed();
-      allow read: if authed();                // cliente filtra por numeroConta na app
-      allow update, delete: if isAdmin();
-    }
-    match /mensagens/{id} {
-      allow create: if true;                  // formulário de contacto do site
-      allow read, update, delete: if isAdmin();
+      // + Intime: o lead lê o SEU pedido (estado em /conta); admin lê todos.
+      allow read: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email)) ||
+        (request.auth.token.email != null && resource.data.email == request.auth.token.email.lower())
+      );
+      allow update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
     }
 
-    // ---------- Promotores ----------
+    match /mensagens/{id} {
+      allow create: if true;
+      allow read, update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // + Intime: pedidos de suporte / mudança de pacote / cancelamento.
+    // O cliente cria e lê (a app filtra por numeroConta); a equipa gere.
+    match /suporte/{id} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null;
+      allow update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // ===== PROMOTORES (afiliados, login Google) =====
+    // O promotor só lê o SEU doc (email autenticado == email do doc);
+    // o admin lê/gere todos. O resumo (stats/leads/clientes) é escrito pelo admin.
     match /promotores/{codigo} {
-      allow get: if authed();
-      allow list, write: if isAdmin();
+      allow get: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email)) ||
+        request.auth.token.email == resource.data.email
+      );
+      allow list: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+      // Admin cria à mão, OU o próprio promotor com um convite válido (uso único).
+      allow create: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email)) ||
+        (
+          request.resource.data.email == request.auth.token.email &&
+          request.resource.data.convite is string &&
+          exists(/databases/$(database)/documents/promotorConvites/$(request.resource.data.convite)) &&
+          get(/databases/$(database)/documents/promotorConvites/$(request.resource.data.convite)).data.usado == false
+        )
+      );
+      allow update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
     }
+
+    // Índice email → código do promotor (login Google). Só o dono lê o seu.
     match /promotorEmails/{email} {
-      allow get: if authed();
-      allow list, write: if isAdmin();
+      allow get: if request.auth != null && (
+        request.auth.token.email == email ||
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+      allow create: if request.auth != null && (
+        request.auth.token.email == email ||
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+      allow list, update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
     }
+
+    // Convites de cadastro (uso único). O token é o segredo do link.
     match /promotorConvites/{token} {
-      allow get: if true;                     // o link de convite é o segredo
-      allow write: if isAdmin();
+      allow get: if true;                       // valida o link antes do login Google
+      allow update: if request.auth != null;    // promotor marca como usado ao registar-se
+      allow list, create, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
     }
+
+    // Starlinks / Equipamentos (gestão interna — só admins)
+    match /kits/{id} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // Clientes (gestão interna — só admins)
+    match /clientes/{id} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // Pagamentos — a equipa gere tudo; o cliente (app) pode submeter (create)
+    match /pagamentos/{id} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // Contratos (gestão interna — só admins)
+    match /contratos/{id} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // Histórico / master file (gestão interna — só admins)
+    match /movimentos/{id} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // Segredos da app (chave IA, etc.) — nunca no site, só admins
+    match /appConfig/{doc} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // ===== APP DO CLIENTE / GATEWAY =====
+
+    // Resumo da conta do cliente (sem dados sensíveis). Get por nº de conta;
+    // list só admin (para calcular os clientes de cada promotor).
+    match /portalContas/{id} {
+      allow get: if request.auth != null;
+      allow list: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+      allow create, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+      // A equipa muda tudo; o cliente só os campos de contacto (não email/pacote/estado).
+      allow update: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email)) ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['contactoWhatsapp', 'contactoAlternativo', 'contactoAtualizadoEm'])
+      );
+    }
+
+    // Índice email → nº de conta (login Google). Só o dono lê o seu.
+    match /portalEmails/{email} {
+      allow get: if request.auth != null && request.auth.token.email == email;
+      allow write: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
+    // Transações M-Pesa lidas pelo gateway.
+    match /transacoesMpesa/{id} {
+      allow create: if true;                 // gateway escreve sem login
+      allow get: if request.auth != null;    // cliente verifica o seu código
+      allow list, update, delete: if request.auth != null && (
+        request.auth.token.email == 'zelio.a.chirindza@gmail.com' ||
+        exists(/databases/$(database)/documents/starlinkAdmins/$(request.auth.token.email))
+      );
+    }
+
   }
 }
