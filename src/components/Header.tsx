@@ -37,8 +37,8 @@ export default function Header() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // sessão: logado por Google OU por nº de conta (localStorage). Muda "Entrar" → "A minha conta".
-  useEffect(() => onAuthStateChanged(auth, (u) => setLogged(!!u?.email || !!localStorage.getItem("numeroConta"))), []);
+  // sessão web = login Google. Muda "Entrar" → "A minha conta".
+  useEffect(() => onAuthStateChanged(auth, (u) => setLogged(!!u?.email)), []);
 
   const closeMenu = () => setMobileOpen(false);
   const onToggleTheme = () => setThemeState(toggleTheme());

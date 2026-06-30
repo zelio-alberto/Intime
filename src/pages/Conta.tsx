@@ -8,7 +8,7 @@ import {
   type DocumentData,
 } from "firebase/firestore";
 import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { signInWithPopup, signInAnonymously, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, Check, Clock, X as XIcon, RefreshCcw, Ban, Copy, Link2,
@@ -102,12 +102,11 @@ const panelPad = panel + " p-6 md:p-8";
 export default function Conta() {
   const cfg = useSiteConfig();
 
-  const [manualConta, setManualConta] = useState<string | null>(() => localStorage.getItem("numeroConta"));
   const [gEmail, setGEmail] = useState<string | null>(null);
   const [gName, setGName] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  const [conta, setConta] = useState<string | null>(manualConta);
+  const [conta, setConta] = useState<string | null>(null);
   const [dados, setDados] = useState<DocumentData>({});
   const [contaExiste, setContaExiste] = useState(false);
   const [hist, setHist] = useState<{ id: string; d: DocumentData }[]>([]);
@@ -129,15 +128,15 @@ export default function Conta() {
     setAuthReady(true);
   }), []);
 
+  // a conta do cliente resolve-se sempre pelo email Google (web = só Google)
   useEffect(() => {
     let active = true;
-    if (manualConta) { setConta(manualConta); return; }
     if (!gEmail) { setConta(null); return; }
     getDoc(doc(db, "portalEmails", gEmail.toLowerCase()))
       .then((s) => { if (active) setConta(s.exists() ? String(s.data().numeroConta || "") || null : null); })
       .catch(() => { if (active) setConta(null); });
     return () => { active = false; };
-  }, [manualConta, gEmail]);
+  }, [gEmail]);
 
   useEffect(() => {
     if (!conta) { setDados({}); setContaExiste(false); setHist([]); setHistLoading(false); return; }
@@ -176,31 +175,27 @@ export default function Conta() {
     return () => { active = false; };
   }, [gEmail, contaExiste]);
 
-  // login por nº de conta: autentica anonimamente para as regras Firestore
-  // protegidas autorizarem leitura/escrita do portal (sem expor email/Google).
-  const entrarConta = (c: string) => { localStorage.setItem("numeroConta", c); setManualConta(c); signInAnonymously(auth).catch(() => {}); };
   const entrarGoogle = async () => { await signInWithPopup(auth, googleProvider); };
   const sair = () => {
-    localStorage.removeItem("numeroConta");
-    setManualConta(null); setConta(null); setDados({}); setContaExiste(false);
+    setConta(null); setDados({}); setContaExiste(false);
     setHist([]); setPromo(null); setCodigo(null); setLead(null); setSecao("");
     signOut(auth).catch(() => {});
   };
 
-  const hasSession = !!conta || !!gEmail;
+  const hasSession = !!gEmail;
   const isCliente = contaExiste;
   const isLead = !!lead && !isCliente;
   const isPromotor = !!promo && !!codigo;
   const nome = String(dados.nome || promo?.nome || gName || "");
 
   /* ----- estados sem painel ----- */
-  if (!authReady && !manualConta) {
+  if (!authReady) {
     return <Layout><div className="min-h-screen grid place-items-center px-6"><p className="text-muted text-sm">A carregar…</p></div></Layout>;
   }
   if (!hasSession) {
     return (
       <Layout>
-        <Login cfg={cfg} onEntrarConta={entrarConta} onEntrarGoogle={entrarGoogle} />
+        <Login cfg={cfg} onEntrarGoogle={entrarGoogle} />
         {toast && <Toast msg={toast} />}
       </Layout>
     );
@@ -1155,34 +1150,17 @@ function GoogleIcon({ size = 17 }: { size?: number }) {
   );
 }
 
-function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
-  cfg: ReturnType<typeof useSiteConfig>; onEntrarConta: (c: string) => void; onEntrarGoogle: () => Promise<void>;
+function Login({ cfg, onEntrarGoogle }: {
+  cfg: ReturnType<typeof useSiteConfig>; onEntrarGoogle: () => Promise<void>;
 }) {
-  const [conta, setConta] = useState("");
-  const [last4, setLast4] = useState("");
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState("");
-  const [showConta, setShowConta] = useState(false);
   const tagline = cfg.taglines && cfg.taglines.length ? cfg.taglines[0] : "A sua casa ligada ao mundo.";
-
-  const entrarConta = async () => {
-    const c = conta.trim().toUpperCase();
-    if (!c) { setErro("Indique o número de conta."); return; }
-    setBusy(true); setErro("");
-    try {
-      const snap = await getDoc(doc(db, "portalContas", c));
-      if (!snap.exists()) { setErro("Conta não encontrada. Verifique o número."); return; }
-      const reg = String(snap.data().whatsappLast4 ?? "");
-      if (reg && last4.trim() !== reg) { setErro("Os 4 dígitos do WhatsApp não conferem."); return; }
-      onEntrarConta(c);
-    } catch { setErro("Erro ao entrar. Tente de novo."); }
-    finally { setBusy(false); }
-  };
 
   const entrarGoogle = async () => {
     setBusy(true); setErro("");
     try { await onEntrarGoogle(); }
-    catch { setErro("Login Google indisponível. Use o nº de conta."); }
+    catch { setErro("Não foi possível entrar com o Google. Tente de novo."); }
     finally { setBusy(false); }
   };
 
@@ -1231,29 +1209,7 @@ function Login({ cfg, onEntrarConta, onEntrarGoogle }: {
 
           {erro && <p className="text-[#ff6b6b] text-sm mt-4">{erro}</p>}
 
-          {!showConta ? (
-            <button onClick={() => { setShowConta(true); setErro(""); }}
-              className="w-full text-center text-muted text-sm mt-6 hover:text-fg transition-colors underline underline-offset-4 decoration-line">
-              Entrar com número de conta
-            </button>
-          ) : (
-            <div className="mt-8 conta-fade">
-              <div className="flex items-center gap-4 mb-6 text-faint text-[11px] uppercase tracking-widest font-mono">
-                <span className="flex-1 h-px bg-line" /> nº de conta <span className="flex-1 h-px bg-line" />
-              </div>
-              <div className="mb-4">
-                <label className={lbl}>Número de conta</label>
-                <input className={field} placeholder="IN-0000" spellCheck={false} value={conta} onChange={(e) => setConta(e.target.value)} />
-              </div>
-              <div className="mb-4">
-                <label className={lbl}>Últimos 4 dígitos do WhatsApp</label>
-                <input className={field} placeholder="0000" inputMode="numeric" maxLength={4} value={last4}
-                  onChange={(e) => setLast4(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") entrarConta(); }} />
-              </div>
-              <button className={btnGhost} disabled={busy} onClick={entrarConta}>{busy ? "A entrar…" : "Entrar com nº de conta"}</button>
-            </div>
-          )}
+          <p className="text-faint text-xs mt-5">Já é cliente da Intime? Use o mesmo email com que falou connosco. Na app do cliente também pode entrar com o número de conta.</p>
 
           <p className="text-muted text-sm mt-10 pt-7 border-t border-line">
             Ainda não é cliente? <Link to="/aderir" className="underline hover:text-fg">Pedir instalação</Link>.
