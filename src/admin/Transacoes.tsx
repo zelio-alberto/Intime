@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { ArrowDownLeft, Link2, Link2Off, Search } from "lucide-react";
+import { ArrowDownLeft, Link2, Link2Off, Search, RefreshCw } from "lucide-react";
 
 type Tx = { id: string } & Record<string, any>;
 
@@ -17,6 +17,25 @@ export default function Transacoes() {
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<"todas" | "assoc" | "porassoc">("todas");
   const [busca, setBusca] = useState("");
+  const [conferindo, setConferindo] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // Força o "casador" no servidor (liga transações ↔ pagamentos e marca Aprovado).
+  const conferirPagamentos = async () => {
+    let url = localStorage.getItem("intime_server_url") || "";
+    let secret = localStorage.getItem("intime_run_secret") || "";
+    if (!url) { const v = window.prompt("URL do servidor de gestão (ex.: https://intime-gestao-server.onrender.com):", ""); if (!v) return; url = v.trim().replace(/\/+$/, ""); localStorage.setItem("intime_server_url", url); }
+    if (!secret) { const v = window.prompt("RUN_SECRET do servidor:", ""); if (!v) return; secret = v.trim(); localStorage.setItem("intime_run_secret", secret); }
+    setConferindo(true); setMsg("");
+    try {
+      const r = await fetch(`${url}/api/run/match-payments`, { method: "POST", headers: { "x-run-secret": secret } });
+      const j = await r.json().catch(() => ({} as any));
+      if (!r.ok) setMsg(`Erro (${r.status}): ${j.error || "verifique o URL e o segredo"}.`);
+      else setMsg(`✓ ${j.confirmados ?? 0} pagamento(s) confirmado(s) de ${j.pendentes ?? 0} pendente(s).`);
+    } catch {
+      setMsg("Servidor indisponível — confirme que o backend de gestão está no ar (deploy no Render).");
+    } finally { setConferindo(false); }
+  };
 
   useEffect(() => {
     const u1 = onSnapshot(query(collection(db, "transacoesMpesa"), orderBy("createdAt", "desc"), limit(300)),
@@ -60,8 +79,17 @@ export default function Transacoes() {
 
   return (
     <div>
-      <h1 className={pageTitle}>Transações recebidas</h1>
-      <p className="text-muted text-sm mb-8">Pagamentos lidos pelo gateway (M-Pesa / e-Mola). Umas ficam ligadas a um pagamento de cliente, outras ainda por associar.</p>
+      <div className="flex items-start justify-between gap-4 mb-2">
+        <div>
+          <h1 className={pageTitle}>Transações recebidas</h1>
+          <p className="text-muted text-sm">Pagamentos lidos pelo gateway (M-Pesa / e-Mola). Umas ficam ligadas a um pagamento de cliente, outras ainda por associar.</p>
+        </div>
+        <button onClick={conferirPagamentos} disabled={conferindo} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors shrink-0 disabled:opacity-50">
+          <RefreshCw size={14} className={conferindo ? "animate-spin" : ""} /> {conferindo ? "A conferir…" : "Conferir pagamentos"}
+        </button>
+      </div>
+      {msg && <div className="border border-line bg-card px-4 py-3 text-sm text-fg mb-4">{msg}</div>}
+      <div className="mb-8" />
 
       <div className="grid sm:grid-cols-3 gap-4 mb-8">
         {stats.map((s) => (
