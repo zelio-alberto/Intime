@@ -35,7 +35,7 @@ export default function MensalidadesStarlink() {
     if (!secret) { const v = window.prompt("RUN_SECRET do servidor:", ""); if (!v) return; secret = v.trim(); localStorage.setItem("intime_run_secret", secret); }
     setVerificando(true); setVerif("");
     try {
-      const r = await fetch(`${url}/api/run/email-check`, { method: "POST", headers: { "x-run-secret": secret } });
+      const r = await fetch(`${url}/intime/run/email-check`, { method: "POST", headers: { "x-run-secret": secret } });
       const j = await r.json().catch(() => ({} as any));
       if (!r.ok) setVerif(`Erro (${r.status}): ${j.error || "verifique o URL e o segredo"}.`);
       else setVerif(`✓ Verificados ${j.verificados ?? "?"} kit(s). Os estados abaixo atualizam-se em segundos.`);
