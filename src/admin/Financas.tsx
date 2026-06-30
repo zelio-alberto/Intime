@@ -60,6 +60,8 @@ export default function Financas() {
 
     const alocadas = kits.filter((k) => kitAlocado(k));
     const prevista = alocadas.reduce((s, k) => s + parseMoney(k.mensalidade), 0);
+    // Custo recorrente: o que a Intime paga à Starlink por mês (kits alocados).
+    const custoStarlinkMes = alocadas.reduce((s, k) => s + parseMoney(starlinkOf(k)?.amount), 0);
     const emAtraso = alocadas.filter((k) => atrasoDe(k.id) >= 1).sort((a, b) => atrasoDe(b.id) - atrasoDe(a.id));
     let divida = 0, b30 = 0, b60 = 0, b90 = 0;
     for (const k of emAtraso) {
@@ -71,7 +73,7 @@ export default function Financas() {
     const aguardamCliente = alocadas.filter((k) => starlinkPorPagar(k) && !pagouMes(k.id));
     const porReceita = [...kits].sort((a, b) => (lifetime[b.id] || 0) - (lifetime[a.id] || 0));
 
-    return { lifetime, count, receitaMes, receitaTotal, prevista, emAtraso, divida, b30, b60, b90, aPagarStarlink, aguardamCliente, porReceita, atrasoDe };
+    return { lifetime, count, paidMonths, receitaMes, receitaTotal, prevista, custoStarlinkMes, emAtraso, divida, b30, b60, b90, aPagarStarlink, aguardamCliente, porReceita, atrasoDe };
   }, [kits, pags]);
 
   const waNum = (cfg.contacts.whatsapp || "").replace(/\D/g, "");
@@ -117,6 +119,10 @@ export default function Financas() {
                   {[[fmtMoney(calc.receitaTotal), "Receita total"], [String(calc.emAtraso.length), "A dever"], [fmtMoney(calc.divida), "Em dívida"]].map(([v, l]) => (
                     <div key={l}><div className="text-lg font-bold">{v}</div><div className="text-white/60 text-xs">{l}</div></div>
                   ))}
+                </div>
+                <div className="mt-5 pt-4 border-t border-white/10 text-sm space-y-1">
+                  <div className="flex justify-between text-white/70"><span>Pago à Starlink / mês (previsto)</span><span>−{fmtMoney(calc.custoStarlinkMes)}</span></div>
+                  <div className="flex justify-between font-bold"><span>Margem prevista / mês</span><span className={calc.prevista - calc.custoStarlinkMes >= 0 ? "text-accent" : "text-[#ff6b6b]"}>{fmtMoney(calc.prevista - calc.custoStarlinkMes)}</span></div>
                 </div>
               </div>
               <div>
@@ -196,7 +202,10 @@ export default function Financas() {
             <div className="space-y-3 max-w-3xl">
               {calc.porReceita.map((k) => {
                 const ger = calc.lifetime[k.id] || 0; const cnt = calc.count[k.id] || 0;
-                const custo = parseMoney(k.custoAquisicao); const lucro = ger - custo;
+                const custoKit = parseMoney(k.custoAquisicao);
+                const slMes = parseMoney(starlinkOf(k)?.amount);
+                const custoSl = slMes * cnt; // mensalidade Starlink × meses pagos
+                const lucro = ger - custoKit - custoSl;
                 return (
                   <div key={k.id} className="border border-line bg-card p-4">
                     <div className="flex items-center justify-between gap-3 mb-3">
@@ -204,11 +213,11 @@ export default function Financas() {
                       <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(k.estado || ""))}`}>{k.estado || (kitAlocado(k) ? "Alugado" : "Livre")}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                      <div><div className="text-faint text-[11px]">Gerou</div><div className="text-fg font-bold">{fmtMoney(ger)}</div></div>
-                      <div><div className="text-faint text-[11px]">Custo</div><div className="text-fg font-bold">{custo > 0 ? fmtMoney(custo) : "—"}</div></div>
-                      <div><div className="text-faint text-[11px]">Lucro</div><div className={`font-bold ${custo <= 0 ? "text-muted" : lucro >= 0 ? "text-accent" : "text-[#ff6b6b]"}`}>{custo > 0 ? `${lucro >= 0 ? "+" : ""}${fmtMoney(lucro)}` : "—"}</div></div>
+                      <div><div className="text-faint text-[11px]">Recebeu do cliente</div><div className="text-fg font-bold">{fmtMoney(ger)}</div></div>
+                      <div><div className="text-faint text-[11px]">Pago à Starlink</div><div className="text-fg font-bold">{custoSl > 0 ? fmtMoney(custoSl) : "—"}</div></div>
+                      <div><div className="text-faint text-[11px]">Lucro</div><div className={`font-bold ${lucro >= 0 ? "text-accent" : "text-[#ff6b6b]"}`}>{lucro >= 0 ? "+" : ""}{fmtMoney(lucro)}</div></div>
                     </div>
-                    <div className="text-faint text-xs mt-2">{cnt} pagamento(s) recebidos</div>
+                    <div className="text-faint text-xs mt-2">{cnt} pagamento(s) · custo do kit {custoKit > 0 ? fmtMoney(custoKit) : "—"}{slMes > 0 ? ` · Starlink ${fmtMoney(slMes)}/mês` : ""}</div>
                   </div>
                 );
               })}
