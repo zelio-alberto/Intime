@@ -14,7 +14,7 @@ function amountToNumber(s: any): number {
 function pagoEsteMes(k: Kit): boolean {
   const st = String(k.starlink?.status || "").toLowerCase();
   if (st.includes("pago") || st.includes("ativ")) return true;
-  return k.starlinkPago?.mes === monthKey();
+  return k.starlinkPagoMes === monthKey();
 }
 
 export default function MensalidadesStarlink() {
@@ -71,7 +71,7 @@ export default function MensalidadesStarlink() {
   const marcarPago = async (k: Kit) => {
     setMarcando(k.id);
     try {
-      await setDoc(doc(db, "kits", k.id), { starlinkPago: { mes: monthKey(), em: serverTimestamp(), manual: true } }, { merge: true });
+      await setDoc(doc(db, "kits", k.id), { starlinkPagoMes: monthKey(), starlinkPagoEm: serverTimestamp() }, { merge: true });
     } catch { /* */ }
     finally { setMarcando(null); }
   };
