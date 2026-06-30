@@ -28,6 +28,7 @@ import MensalidadesStarlink from './admin/MensalidadesStarlink';
 import Clientes from './admin/Clientes';
 import Starlinks from './admin/Starlinks';
 import Historico from './admin/Historico';
+import Contratos from './admin/Contratos';
 
 export default function App() {
   return (
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="clientes" element={<Clientes />} />
           <Route path="starlinks" element={<Starlinks />} />
           <Route path="historico" element={<Historico />} />
+          <Route path="contratos" element={<Contratos />} />
           <Route path="transacoes" element={<Transacoes />} />
           <Route path="starlink" element={<MensalidadesStarlink />} />
           <Route path="config" element={<ConfigLayout />}>

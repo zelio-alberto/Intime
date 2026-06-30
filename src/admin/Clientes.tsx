@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { collection, onSnapshot, query, where, orderBy, getDocs, type DocumentData } from "firebase/firestore";
+import { collection, onSnapshot, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
-import { pageTitle } from "./ui";
-import { fmtMoney, parseMoney, starlinkOf, margemMensal, fmtDateTime, estadoPillCls } from "./gestaoUtils";
-import { Search, X, User, Wifi, Receipt } from "lucide-react";
+import { pageTitle, input, label } from "./ui";
+import { fmtMoney, parseMoney, starlinkOf, margemMensal, fmtDateTime, estadoPillCls, monthKey, monthLabel, logMov } from "./gestaoUtils";
+import { Search, X, User, Wifi, Receipt, Plus } from "lucide-react";
 
 type Cli = { id: string } & DocumentData;
 
@@ -86,13 +86,43 @@ function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () => void }) {
   const [kits, setKits] = useState<DocumentData[]>([]);
   const [pags, setPags] = useState<DocumentData[]>([]);
 
+  const [reg, setReg] = useState(false);
+  const [mes, setMes] = useState(monthKey());
+  const [valor, setValor] = useState("");
+  const [metodo, setMetodo] = useState("M-Pesa");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const carregarPags = async () => {
+    try { const ps = await getDocs(query(collection(db, "pagamentos"), where("clienteId", "==", cli.id), orderBy("data", "desc"))); setPags(ps.docs.map((d) => ({ id: d.id, ...d.data() }))); }
+    catch { try { const ps = await getDocs(query(collection(db, "pagamentos"), where("clienteId", "==", cli.id))); setPags(ps.docs.map((d) => ({ id: d.id, ...d.data() }))); } catch { /* */ } }
+  };
+
   useEffect(() => {
     (async () => {
       try { const ks = await getDocs(query(collection(db, "kits"), where("clienteId", "==", cli.id))); setKits(ks.docs.map((d) => ({ id: d.id, ...d.data() }))); } catch { /* */ }
-      try { const ps = await getDocs(query(collection(db, "pagamentos"), where("clienteId", "==", cli.id), orderBy("data", "desc"))); setPags(ps.docs.map((d) => ({ id: d.id, ...d.data() }))); }
-      catch { try { const ps = await getDocs(query(collection(db, "pagamentos"), where("clienteId", "==", cli.id))); setPags(ps.docs.map((d) => ({ id: d.id, ...d.data() }))); } catch { /* */ } }
+      await carregarPags();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cli.id]);
+
+  const kit = kits[0];
+  const abrirReg = () => { setValor(kit?.mensalidade ? String(Math.round(parseMoney(kit.mensalidade))) : ""); setMes(monthKey()); setMsg(""); setReg(true); };
+  const registar = async () => {
+    if (parseMoney(valor) <= 0) { setMsg("Indique o valor."); return; }
+    setSaving(true); setMsg("");
+    try {
+      await addDoc(collection(db, "pagamentos"), {
+        kitId: kit?.id || "", clienteId: cli.id, clienteNome: cli.nome || "",
+        mes, valor: parseMoney(valor), metodo, estado: "Aprovado", tipo: "Mensalidade",
+        ...(kit?.promotor ? { promotor: kit.promotor } : {}),
+        data: serverTimestamp(),
+      });
+      await logMov("pagamento", `Pagamento ${monthLabel(mes)} · ${fmtMoney(parseMoney(valor))} (${metodo}) · ${cli.nome || ""}`, { kitId: kit?.id, clienteId: cli.id, valor: parseMoney(valor) });
+      setReg(false); setMsg("Pagamento registado ✓"); await carregarPags();
+    } catch { setMsg("Erro ao registar. Tente de novo."); }
+    finally { setSaving(false); }
+  };
 
   const info: [string, string][] = [
     ["Tipo", cli.tipo === "empresa" ? "Empresa" : "Particular"],
@@ -160,6 +190,26 @@ function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () => void }) {
           </Bloco>
 
           <Bloco icon={Receipt} titulo={`Pagamentos (${pags.length})`}>
+            <button onClick={reg ? () => setReg(false) : abrirReg} className="mb-4 inline-flex items-center gap-2 border border-line px-4 py-2 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors">
+              <Plus size={14} /> Registar pagamento
+            </button>
+            {msg && <div className="text-sm text-accent mb-3">{msg}</div>}
+            {reg && (
+              <div className="border border-line bg-bg p-4 mb-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className={label}>Mês (YYYY-MM)</label><input className={input} value={mes} onChange={(e) => setMes(e.target.value)} placeholder="2026-07" /></div>
+                  <div><label className={label}>Valor (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
+                </div>
+                <div><label className={label}>Método</label>
+                  <select className={input} value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                    {["M-Pesa", "e-Mola", "Numerário", "Banco", "Outro"].map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <button onClick={registar} disabled={saving} className="w-full bg-fg text-bg py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
+                  {saving ? "A guardar…" : "Guardar pagamento"}
+                </button>
+              </div>
+            )}
             {pags.length === 0 ? <p className="text-faint text-sm">Sem pagamentos.</p> : (
               <div className="divide-y divide-[var(--line)]">
                 {pags.map((p) => (

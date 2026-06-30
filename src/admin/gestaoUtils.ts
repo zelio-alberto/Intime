@@ -1,5 +1,17 @@
 // Utilitários partilhados das páginas de gestão na web (porto de data.dart).
-import { Timestamp, type DocumentData } from "firebase/firestore";
+import { Timestamp, addDoc, collection, serverTimestamp, type DocumentData } from "firebase/firestore";
+import { db, auth } from "../firebase";
+
+// Regista um movimento no livro central (não falha o fluxo se der erro).
+export async function logMov(tipo: string, descricao: string, opts?: { kitId?: string; clienteId?: string; valor?: number }) {
+  try {
+    await addDoc(collection(db, "movimentos"), {
+      tipo, descricao,
+      kitId: opts?.kitId || "", clienteId: opts?.clienteId || "", valor: opts?.valor || 0,
+      by: auth.currentUser?.email || "", at: serverTimestamp(),
+    });
+  } catch { /* */ }
+}
 
 export function parseMoney(v: unknown): number {
   if (v == null) return 0;
