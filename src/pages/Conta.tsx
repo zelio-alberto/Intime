@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import Layout from "../components/Layout";
-import { db, auth, googleProvider, storage } from "../firebase";
+import { db, auth, googleProvider } from "../firebase";
 import {
   doc, getDoc, getDocs, setDoc, addDoc, collection, onSnapshot,
   query, where, orderBy, limit, serverTimestamp, Timestamp,
   type DocumentData,
 } from "firebase/firestore";
-import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
@@ -61,6 +60,19 @@ function fmtData(ts: unknown) {
   return "";
 }
 function estadoStr(d: DocumentData) { return String(d.estado ?? ""); }
+// Upload direto do browser para o Cloudinary (preset unsigned — sem segredos).
+async function uploadCloudinary(file: File, cloudName: string, preset: string, folder: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("upload_preset", preset);
+  if (folder) form.append("folder", folder);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, { method: "POST", body: form });
+  if (!res.ok) throw new Error("Cloudinary " + res.status);
+  const data = await res.json();
+  const url = data.secure_url || data.url;
+  if (!url) throw new Error("sem url");
+  return String(url);
+}
 function initials(nome: string) {
   const parts = nome.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return "IN";
@@ -503,7 +515,7 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
       {alvo
         ? null
         : atraso
-        ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} showToast={showToast} />
+        ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} cloudinary={cfg.cloudinary} showToast={showToast} />
         : (
           <div className={panelPad + " text-center"}>
             <CheckCircle2 className="mx-auto mb-3 text-accent" size={30} />
@@ -555,10 +567,12 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
 type PagStep = "metodo" | "origem" | "transferir" | "verificar" | "fallback" | "enviado";
 function isMobileMoney(m?: MetodoPag) { const t = String(m?.tipo || "").toLowerCase(); return t.includes("pesa") || t.includes("mola"); }
 
-function PagamentoWizard({ conta, dados, metodos, contactos, showToast }: {
+function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToast }: {
   conta: string; dados: DocumentData; metodos: MetodoPag[];
-  contactos: { email: string; whatsapp: string; phone: string }; showToast: (m: string) => void;
+  contactos: { email: string; whatsapp: string; phone: string };
+  cloudinary: { cloudName: string; uploadPreset: string }; showToast: (m: string) => void;
 }) {
+  const podeFoto = !!(cloudinary?.cloudName && cloudinary?.uploadPreset);
   const valor = mtValue(dados.mensalidade);
   const numeroDaConta = String(dados.contactoWhatsapp || dados.whatsapp || "").trim();
 
@@ -637,14 +651,13 @@ function PagamentoWizard({ conta, dados, metodos, contactos, showToast }: {
 
   const enviarComprovativo = async (file?: File) => {
     if (!file) return;
+    if (!podeFoto) { showToast("Envio de foto indisponível. Use o código ou envie pelo WhatsApp."); return; }
     setBusy(true);
     try {
-      const r = sRef(storage, `comprovativos/${conta}/${Date.now()}.jpg`);
-      await uploadBytes(r, file, { contentType: file.type || "image/jpeg" });
-      const url = await getDownloadURL(r);
+      const url = await uploadCloudinary(file, cloudinary.cloudName, cloudinary.uploadPreset, `comprovativos/${conta}`);
       await registar("Pendente", { comprovativoUrl: url, codigo: codigo.trim().toUpperCase() || null });
       setMatched(false); setStep("enviado");
-    } catch { showToast("Não foi possível enviar o comprovativo. Tente de novo ou fale com a equipa."); }
+    } catch { showToast("Não foi possível enviar o comprovativo. Tente de novo ou envie pelo WhatsApp."); }
     finally { setBusy(false); }
   };
 
@@ -757,10 +770,16 @@ function PagamentoWizard({ conta, dados, metodos, contactos, showToast }: {
               <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A confirmar…" : "Confirmar com o código"}</button>
             </div>
             <div className="flex items-center gap-4 text-faint text-xs"><span className="flex-1 h-px bg-line" /> ou <span className="flex-1 h-px bg-line" /></div>
-            <label className={btnGhost + " cursor-pointer"}>
-              <Upload size={15} /> {busy ? "A enviar…" : "Anexar foto do comprovativo"}
-              <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
-            </label>
+            {podeFoto ? (
+              <label className={btnGhost + " cursor-pointer"}>
+                <Upload size={15} /> {busy ? "A enviar…" : "Anexar foto do comprovativo"}
+                <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
+              </label>
+            ) : (
+              <a href={waUrl} target="_blank" rel="noopener" className={btnGhost}>
+                <Mail size={15} /> Enviar comprovativo pelo WhatsApp
+              </a>
+            )}
             <button className="w-full text-center text-muted text-sm hover:text-fg transition-colors" onClick={() => setStep("verificar")}>Tentar procurar de novo</button>
           </div>
         )}

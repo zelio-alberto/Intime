@@ -34,6 +34,7 @@ export type SiteConfig = {
   contract: string;
   taglines: string[];
   metodosPagamento: PaymentMethod[];
+  cloudinary: { cloudName: string; uploadPreset: string };
 };
 
 export const DEFAULT_TAGLINES = [
@@ -172,6 +173,7 @@ export const DEFAULT_CONFIG: SiteConfig = {
   contract: DEFAULT_CONTRACT,
   taglines: DEFAULT_TAGLINES,
   metodosPagamento: [],
+  cloudinary: { cloudName: "", uploadPreset: "" },
 };
 
 export const CONFIG_REF = () => doc(db, "siteConfig", "starlink");
@@ -192,6 +194,7 @@ export function useSiteConfig(): SiteConfig {
             contract: data.contract || DEFAULT_CONFIG.contract,
             taglines: data.taglines && data.taglines.length ? data.taglines : DEFAULT_CONFIG.taglines,
             metodosPagamento: Array.isArray(data.metodosPagamento) ? data.metodosPagamento : DEFAULT_CONFIG.metodosPagamento,
+            cloudinary: { ...DEFAULT_CONFIG.cloudinary, ...(data.cloudinary || {}) },
           });
         }
       },

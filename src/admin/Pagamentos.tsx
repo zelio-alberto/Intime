@@ -2,7 +2,7 @@ import { useConfig } from "./ConfigContext";
 import { type PaymentMethod } from "../useSiteConfig";
 import { input, label, pageTitle } from "./ui";
 import SaveBar from "./SaveBar";
-import { Plus, Trash2, Wallet } from "lucide-react";
+import { Plus, Trash2, Wallet, Image } from "lucide-react";
 
 const TIPOS = ["M-Pesa", "e-Mola", "Banco", "Outro"];
 
@@ -57,6 +57,24 @@ export default function Pagamentos() {
           ))}
         </div>
       )}
+
+      {/* Cloudinary — onde os comprovativos (fotos) são guardados */}
+      <div className="border border-line p-5 bg-card mt-8">
+        <div className="flex items-center gap-2 font-display text-lg text-fg mb-1"><Image size={18} className="text-accent" /> Comprovativos (Cloudinary)</div>
+        <p className="text-muted text-sm mb-5">Para guardar a foto do comprovativo enviada pelo cliente. Cria uma conta grátis em cloudinary.com → Settings → Upload → cria um preset <b>Unsigned</b>. Depois mete aqui o <b>Cloud name</b> e o <b>nome do preset</b>.</p>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className={label}>Cloud name</label>
+            <input className={input} value={cfg.cloudinary?.cloudName || ""} placeholder="ex.: dxxxxx"
+              onChange={(e) => setCfg((c) => ({ ...c, cloudinary: { ...(c.cloudinary || { cloudName: "", uploadPreset: "" }), cloudName: e.target.value.trim() } }))} />
+          </div>
+          <div>
+            <label className={label}>Upload preset (unsigned)</label>
+            <input className={input} value={cfg.cloudinary?.uploadPreset || ""} placeholder="ex.: intime_comprovativos"
+              onChange={(e) => setCfg((c) => ({ ...c, cloudinary: { ...(c.cloudinary || { cloudName: "", uploadPreset: "" }), uploadPreset: e.target.value.trim() } }))} />
+          </div>
+        </div>
+      </div>
 
       <SaveBar />
     </div>
