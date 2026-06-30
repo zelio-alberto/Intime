@@ -30,6 +30,7 @@ import Starlinks from './admin/Starlinks';
 import Historico from './admin/Historico';
 import Contratos from './admin/Contratos';
 import Mapa from './admin/Mapa';
+import NovoCadastro from './admin/NovoCadastro';
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ export default function App() {
             <Route index element={<Pedidos />} />
             <Route path="mensagens" element={<Mensagens />} />
           </Route>
+          <Route path="novo" element={<NovoCadastro />} />
           <Route path="clientes" element={<Clientes />} />
           <Route path="starlinks" element={<Starlinks />} />
           <Route path="historico" element={<Historico />} />

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { collection, onSnapshot, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { MessageCircle, Trash2, MapPin } from "lucide-react";
+import { MessageCircle, Trash2, MapPin, UserPlus } from "lucide-react";
 
 type Req = { id: string; nome?: string; whatsapp?: string; plano?: string; cidade?: string; bairro?: string; tipo?: string; horario?: string; gps?: string; status?: string; createdAt?: any };
 
@@ -57,6 +58,9 @@ export default function Pedidos() {
                   <p className="text-faint text-xs font-mono">{when(r.createdAt)}</p>
                 </div>
                 <div className="flex items-center gap-2">
+                  {st !== "concluido" && (
+                    <Link to={`/admin/novo?lead=${r.id}`} className="inline-flex items-center gap-2 px-4 py-2.5 bg-fg text-bg font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-accent transition-colors"><UserPlus size={14} /> Converter</Link>
+                  )}
                   <a href={`https://wa.me/${num}?text=${`Olá ${r.nome || ""}! Sou da equipa Intime, sobre o seu pedido do pacote ${r.plano || ""}.`}`} target="_blank" rel="noopener"
                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#25D366] text-white font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-[#20bd5a] transition-colors"><MessageCircle size={14} /> WhatsApp</a>
                   <button onClick={() => remove(r.id)} className="text-faint hover:text-accent p-2" title="Eliminar"><Trash2 size={16} /></button>

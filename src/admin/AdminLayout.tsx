@@ -4,10 +4,11 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAdminAuth } from "./useAdminAuth";
 import { ConfigProvider, useConfig } from "./ConfigContext";
-import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink, ArrowDownLeft, Satellite, Users, Receipt, History, FileText, Map } from "lucide-react";
+import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink, ArrowDownLeft, Satellite, Users, Receipt, History, FileText, Map, UserPlus } from "lucide-react";
 
 const NAV = [
   { to: "/admin", end: true, label: "Painel", icon: LayoutDashboard },
+  { to: "/admin/novo", label: "Novo cadastro", icon: UserPlus },
   { to: "/admin/clientes", label: "Clientes", icon: Users },
   { to: "/admin/starlinks", label: "Starlinks", icon: Satellite },
   { to: "/admin/solicitacoes", label: "Solicitações", icon: Inbox },
