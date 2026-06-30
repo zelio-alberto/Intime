@@ -204,8 +204,10 @@ export default function Financas() {
                 const ger = calc.lifetime[k.id] || 0; const cnt = calc.count[k.id] || 0;
                 const custoKit = parseMoney(k.custoAquisicao);
                 const slMes = parseMoney(starlinkOf(k)?.amount);
-                const custoSl = slMes * cnt; // mensalidade Starlink × meses pagos
-                const lucro = ger - custoKit - custoSl;
+                const custoSl = slMes * cnt; // Starlink × meses pagos
+                const margemMes = parseMoney(k.mensalidade) - slMes;
+                const payback = margemMes > 0 && custoKit > 0 ? Math.ceil(custoKit / margemMes) : null;
+                const lucroAcum = ger - custoKit - custoSl;
                 return (
                   <div key={k.id} className="border border-line bg-card p-4">
                     <div className="flex items-center justify-between gap-3 mb-3">
@@ -213,11 +215,11 @@ export default function Financas() {
                       <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(k.estado || ""))}`}>{k.estado || (kitAlocado(k) ? "Alugado" : "Livre")}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                      <div><div className="text-faint text-[11px]">Recebeu do cliente</div><div className="text-fg font-bold">{fmtMoney(ger)}</div></div>
-                      <div><div className="text-faint text-[11px]">Pago à Starlink</div><div className="text-fg font-bold">{custoSl > 0 ? fmtMoney(custoSl) : "—"}</div></div>
-                      <div><div className="text-faint text-[11px]">Lucro</div><div className={`font-bold ${lucro >= 0 ? "text-accent" : "text-[#ff6b6b]"}`}>{lucro >= 0 ? "+" : ""}{fmtMoney(lucro)}</div></div>
+                      <div><div className="text-faint text-[11px]">Margem / mês</div><div className="text-accent font-bold">{slMes > 0 || k.mensalidade ? fmtMoney(margemMes) : "—"}</div></div>
+                      <div><div className="text-faint text-[11px]">Custo do kit</div><div className="text-fg font-bold">{custoKit > 0 ? fmtMoney(custoKit) : "—"}</div></div>
+                      <div><div className="text-faint text-[11px]">Lucro acumulado</div><div className={`font-bold ${lucroAcum >= 0 ? "text-accent" : "text-[#ff6b6b]"}`}>{lucroAcum >= 0 ? "+" : ""}{fmtMoney(lucroAcum)}</div></div>
                     </div>
-                    <div className="text-faint text-xs mt-2">{cnt} pagamento(s) · custo do kit {custoKit > 0 ? fmtMoney(custoKit) : "—"}{slMes > 0 ? ` · Starlink ${fmtMoney(slMes)}/mês` : ""}</div>
+                    <div className="text-faint text-xs mt-2">Recebeu {fmtMoney(ger)} em {cnt} pag · pago à Starlink {fmtMoney(custoSl)}{payback ? ` · recupera o kit em ~${payback} meses` : ""}</div>
                   </div>
                 );
               })}
