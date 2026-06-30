@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, addDoc, updateDoc, doc, getDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { ArrowDownLeft, Link2, Link2Off, Search, RefreshCw } from "lucide-react";
+import { monthKey, fmtMoney, kitAlocado, logMov } from "./gestaoUtils";
+import { ArrowDownLeft, Link2, Link2Off, Search, RefreshCw, Link as LinkIcon, X, Satellite } from "lucide-react";
 
 type Tx = { id: string } & Record<string, any>;
 
@@ -19,6 +20,31 @@ export default function Transacoes() {
   const [busca, setBusca] = useState("");
   const [conferindo, setConferindo] = useState(false);
   const [msg, setMsg] = useState("");
+  const [kits, setKits] = useState<DocumentData[]>([]);
+  const [alvo, setAlvo] = useState<Tx | null>(null);
+  const [buscaKit, setBuscaKit] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const associar = async (tx: Tx, kit: DocumentData) => {
+    setSalvando(true);
+    try {
+      let numeroConta = String(kit.numeroConta || "");
+      if (!numeroConta && kit.clienteId) {
+        try { const cs = await getDoc(doc(db, "clientes", String(kit.clienteId))); numeroConta = cs.exists() ? String(cs.data().numeroConta || "") : ""; } catch { /* */ }
+      }
+      await addDoc(collection(db, "pagamentos"), {
+        kitId: kit.id, clienteId: kit.clienteId || "", clienteNome: kit.cliente || "", numeroConta,
+        mes: monthKey(), valor: Number(tx.valor) || 0, metodo: tx.operadora || "M-Pesa", codigo: tx.codigo || "",
+        estado: "Aprovado", tipo: "Mensalidade",
+        ...(kit.promotor ? { promotor: kit.promotor } : {}),
+        data: serverTimestamp(),
+      });
+      await updateDoc(doc(db, "transacoesMpesa", tx.id), { estado: "associado", clienteId: kit.clienteId || "", kitId: kit.id, numeroConta });
+      await logMov("pagamento", `M-Pesa associado a ${kit.cliente || ""} · ${fmtMoney(Number(tx.valor) || 0)} (${tx.codigo || ""})`, { kitId: kit.id, clienteId: String(kit.clienteId || ""), valor: Number(tx.valor) || 0 });
+      setAlvo(null); setBuscaKit("");
+    } catch { /* */ }
+    finally { setSalvando(false); }
+  };
 
   // Força o "casador" no servidor (liga transações ↔ pagamentos e marca Aprovado).
   const conferirPagamentos = async () => {
@@ -49,13 +75,15 @@ export default function Transacoes() {
       });
       setPagsByCodigo(map);
     }, () => {});
-    return () => { u1(); u2(); };
+    const u3 = onSnapshot(collection(db, "kits"), (s) => setKits(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
+    return () => { u1(); u2(); u3(); };
   }, []);
 
   const enriched = useMemo(() => txs.map((t) => {
     const liga = pagsByCodigo[up(t.codigo)];
     const conta = t.numeroConta || liga?.numeroConta || "";
-    return { ...t, _assoc: !!conta, _conta: conta, _cliente: liga?.clienteNome || t.nome || "" };
+    const assoc = !!conta || !!t.clienteId || String(t.estado || "").toLowerCase() === "associado";
+    return { ...t, _assoc: assoc, _conta: conta, _cliente: liga?.clienteNome || t.nome || "" };
   }), [txs, pagsByCodigo]);
 
   const total = enriched.length;
@@ -136,11 +164,14 @@ export default function Transacoes() {
                 </div>
                 <div className="font-mono text-xs text-muted break-all self-center">{t.codigo || "—"}</div>
                 <div className="text-faint text-xs self-center">{quando(t.createdAt)}</div>
-                <div className="self-center">
+                <div className="self-center flex items-center gap-2 justify-self-start md:justify-self-end">
                   {t._assoc ? (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-accent/40 text-accent bg-accent/10 whitespace-nowrap"><Link2 size={12} /> {t._conta}</span>
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-accent/40 text-accent bg-accent/10 whitespace-nowrap"><Link2 size={12} /> {t._conta || t._cliente || "Associada"}</span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-muted whitespace-nowrap"><Link2Off size={12} /> Por associar</span>
+                    <>
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-muted whitespace-nowrap"><Link2Off size={12} /> Por associar</span>
+                      <button onClick={() => { setAlvo(t); setBuscaKit(""); }} className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors whitespace-nowrap"><LinkIcon size={11} /> Associar</button>
+                    </>
                   )}
                 </div>
               </div>
@@ -148,6 +179,38 @@ export default function Transacoes() {
           </div>
         )}
       </div>
+
+      {alvo && (
+        <div className="fixed inset-0 z-[400] flex justify-end">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setAlvo(null)} />
+          <div className="relative w-full max-w-md h-full bg-bg border-l border-line overflow-y-auto">
+            <div className="sticky top-0 bg-bg/95 backdrop-blur border-b border-line px-6 py-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="font-display text-xl text-fg">Associar {fmtMoney(Number(alvo.valor) || 0)}</div>
+                <div className="text-faint text-xs">{alvo.nome || alvo.remetente || ""} · {alvo.codigo || ""}</div>
+              </div>
+              <button onClick={() => setAlvo(null)} className="w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg"><X size={16} /></button>
+            </div>
+            <div className="p-6">
+              <p className="text-muted text-sm mb-4">Escolha o cliente (kit alocado) a quem pertence este pagamento.</p>
+              <div className="relative mb-4">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+                <input value={buscaKit} onChange={(e) => setBuscaKit(e.target.value)} placeholder="Procurar cliente…" className="w-full bg-bg border border-line pl-9 pr-3 py-2.5 text-sm text-fg outline-none focus:border-accent transition-colors" />
+              </div>
+              <div className="space-y-2">
+                {kits.filter(kitAlocado).filter((k) => { const b = buscaKit.toLowerCase(); return !b || [k.cliente, k.pacote, k.conta].some((v) => String(v || "").toLowerCase().includes(b)); }).map((k) => (
+                  <button key={k.id} disabled={salvando} onClick={() => associar(alvo, k)} className="w-full text-left border border-line p-4 hover:border-accent/50 hover:bg-card/40 transition-colors flex items-center gap-3 disabled:opacity-50">
+                    <div className="w-9 h-9 grid place-items-center border border-line text-accent shrink-0"><Satellite size={15} /></div>
+                    <div className="min-w-0 flex-1"><div className="text-fg font-medium truncate">{k.cliente || "—"}</div><div className="text-faint text-xs truncate">{k.pacote || ""}{k.mensalidade ? ` · ${k.mensalidade}` : ""}</div></div>
+                    <LinkIcon size={15} className="text-faint" />
+                  </button>
+                ))}
+                {kits.filter(kitAlocado).length === 0 && <p className="text-faint text-sm text-center py-8">Nenhum kit alocado a clientes.</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

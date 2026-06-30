@@ -4,7 +4,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAdminAuth } from "./useAdminAuth";
 import { ConfigProvider, useConfig } from "./ConfigContext";
-import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink, ArrowDownLeft, Satellite, Users, Receipt, History, FileText } from "lucide-react";
+import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink, ArrowDownLeft, Satellite, Users, Receipt, History, FileText, Map } from "lucide-react";
 
 const NAV = [
   { to: "/admin", end: true, label: "Painel", icon: LayoutDashboard },
@@ -15,6 +15,7 @@ const NAV = [
   { to: "/admin/starlink", label: "Mensalidades", icon: Receipt },
   { to: "/admin/contratos", label: "Contratos", icon: FileText },
   { to: "/admin/historico", label: "Histórico", icon: History },
+  { to: "/admin/mapa", label: "Mapa", icon: Map },
   { to: "/admin/config", label: "Configurações", icon: Settings },
 ];
 

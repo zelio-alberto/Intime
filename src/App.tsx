@@ -29,6 +29,7 @@ import Clientes from './admin/Clientes';
 import Starlinks from './admin/Starlinks';
 import Historico from './admin/Historico';
 import Contratos from './admin/Contratos';
+import Mapa from './admin/Mapa';
 
 export default function App() {
   return (
@@ -58,6 +59,7 @@ export default function App() {
           <Route path="starlinks" element={<Starlinks />} />
           <Route path="historico" element={<Historico />} />
           <Route path="contratos" element={<Contratos />} />
+          <Route path="mapa" element={<Mapa />} />
           <Route path="transacoes" element={<Transacoes />} />
           <Route path="starlink" element={<MensalidadesStarlink />} />
           <Route path="config" element={<ConfigLayout />}>
