@@ -105,6 +105,45 @@ function abrirFatura(p: DocumentData, dados: DocumentData, contacts: { email: st
   </body></html>`);
   w.document.close(); w.focus(); setTimeout(() => { try { w.print(); } catch { /* */ } }, 400);
 }
+
+// Fatura PROVISÓRIA do próximo período (ainda por pagar).
+function abrirProximaFatura(dados: DocumentData, prox: Date, contacts: { email: string; whatsapp: string; phone: string }) {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  const valor = Math.round(mtValue(dados.mensalidade));
+  const fim = new Date(prox); fim.setDate(fim.getDate() + 30);
+  const fmtD = (d: Date) => d.toLocaleDateString("pt-PT", { day: "2-digit", month: "long", year: "numeric" });
+  const fVal = (n: number) => n.toLocaleString("pt-PT");
+  const conta = String(dados.numeroConta || "");
+  const invNo = `INV-${conta}-${prox.getFullYear()}-${String(prox.getMonth() + 1).padStart(2, "0")}-PREV`.toUpperCase();
+  const pacote = String(dados.pacote || "Serviço de internet Intime");
+  const nome = String(dados.nome || "");
+  const local = [dados.bairro, dados.cidade].filter(Boolean).join(", ");
+  const logo = `${window.location.origin}/logo-intime.png`;
+  w.document.write(`<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>${invNo}</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0 auto;padding:36px;max-width:800px;font-size:13px;line-height:1.55}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;background:#f4f5f6;padding:26px;border-radius:10px}
+    .brand{display:flex;align-items:center;gap:10px} .brand img{width:36px;height:36px;object-fit:contain} .brand b{font-size:21px;letter-spacing:3px}
+    .rt{text-align:right} .rt h1{margin:0;font-size:24px} .rt .tag{display:inline-block;background:#e9edf0;color:#555;font-size:10px;letter-spacing:1px;padding:3px 8px;border-radius:4px;margin-top:6px}
+    .rt .no{font-weight:bold;margin-top:8px} .rt .meta{color:#555;font-size:12px;margin-top:6px}
+    .to{padding:20px 4px;color:#333} table{width:100%;border-collapse:collapse} th{text-align:left;border-bottom:1px solid #ccc;padding:10px 4px;font-size:12px} td{padding:9px 4px} .r{text-align:right}
+    .tot td{border-top:1px solid #ccc;font-weight:bold} .due{font-size:20px;font-weight:bold;border-top:2px solid #111;padding-top:14px;display:flex;justify-content:space-between;margin-top:10px}
+    .note{color:#555;font-size:12px;margin-top:24px} .foot{text-align:center;color:#666;font-size:11.5px;margin-top:44px;border-top:1px solid #eee;padding-top:16px}
+    @media print{body{padding:14px}}</style></head><body>
+    <div class="head"><div class="brand"><img src="${logo}" alt="Intime"/><b>INTIME</b></div>
+      <div class="rt"><h1>Próxima fatura</h1><div class="tag">PROVISÓRIA</div><div class="no">${invNo}</div><div class="meta">Vencimento: ${fmtD(prox)}<br>Conta: ${conta}</div></div></div>
+    <div class="to"><b>${nome}</b>${local ? `<br>${local}` : ""}</div>
+    <table>
+      <tr><th>Descrição</th><th class="r">Qt</th><th class="r">Valor</th></tr>
+      <tr><td>${pacote}<br><span style="color:#777;font-size:11.5px">Período: ${fmtD(prox)} – ${fmtD(fim)}</span></td><td class="r">1</td><td class="r">MZN ${fVal(valor)}</td></tr>
+      <tr class="tot"><td>Custo total</td><td></td><td class="r">MZN ${fVal(valor)}</td></tr>
+    </table>
+    <div class="due"><span>Total a pagar</span><span>MZN ${fVal(valor)}</span></div>
+    <p class="note">Fatura provisória do próximo período de 30 dias. O valor pode mudar caso altere o pacote. Pague até ${fmtD(prox)} para manter o serviço ativo.${contacts.phone ? ` Dúvidas: ${contacts.phone}.` : ""}</p>
+    <div class="foot">Intime — Internet Starlink em Moçambique${contacts.email ? ` · ${contacts.email}` : ""}${contacts.phone ? ` · ${contacts.phone}` : ""}<br>Documento processado por computador.</div>
+  </body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => { try { w.print(); } catch { /* */ } }, 400);
+}
 // Upload direto do browser para o Cloudinary (preset unsigned — sem segredos).
 async function uploadCloudinary(file: File, cloudName: string, preset: string, folder: string): Promise<string> {
   const form = new FormData();
@@ -556,10 +595,22 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
         </div>
         <div className={panelPad}>
           <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Ciclo de faturação</div>
-          <p className="text-fg text-sm">{dados.diaPagamento ? `Pagamento no dia ${String(dados.diaPagamento).replace(/[^0-9]/g, "")} de cada mês.` : "Definido pela Intime."}</p>
+          <p className="text-fg text-sm">A cada 30 dias desde a ativação.</p>
           {prox && <p className="text-muted text-sm mt-1">Próximo: {dataExtenso(prox)}.</p>}
         </div>
       </div>
+
+      {/* próxima fatura (pré-visualização) */}
+      {prox && mtValue(dados.mensalidade) > 0 && (
+        <div className={panelPad + " flex items-center justify-between gap-4 flex-wrap"}>
+          <div>
+            <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-1">Próxima fatura</div>
+            <div className="text-fg"><b>{dados.mensalidade} MT</b> · vence {dataExtenso(prox)}</div>
+            <div className="text-muted text-sm mt-0.5">{dados.pacote || ""} · próximo período de 30 dias</div>
+          </div>
+          <button onClick={() => abrirProximaFatura(dados, prox, cfg.contacts)} className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors"><FileText size={15} /> Pré-visualizar</button>
+        </div>
+      )}
 
       {/* PAGAR — só disponível quando há dívida e não está já em processamento */}
       {alvo
