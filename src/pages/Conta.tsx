@@ -199,9 +199,14 @@ export default function Conta() {
     if (!conta) { setDados({}); setContaExiste(false); setHist([]); setHistLoading(false); return; }
     setHistLoading(true);
     const unsubC = onSnapshot(doc(db, "portalContas", conta), (snap) => { setContaExiste(snap.exists()); setDados(snap.data() || {}); }, () => {});
-    const q = query(collection(db, "pagamentos"), where("numeroConta", "==", conta), orderBy("data", "desc"));
+    // sem orderBy → não exige índice composto; ordena no cliente por data desc.
+    const q = query(collection(db, "pagamentos"), where("numeroConta", "==", conta));
     const unsubH = onSnapshot(q,
-      (snap) => { setHist(snap.docs.map((d) => ({ id: d.id, d: d.data() }))); setHistLoading(false); },
+      (snap) => {
+        const arr = snap.docs.map((d) => ({ id: d.id, d: d.data() }));
+        arr.sort((a, b) => ((b.d.data?.seconds || 0) - (a.d.data?.seconds || 0)));
+        setHist(arr); setHistLoading(false);
+      },
       () => { setHistLoading(false); });
     return () => { unsubC(); unsubH(); };
   }, [conta]);
