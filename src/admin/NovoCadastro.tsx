@@ -116,7 +116,7 @@ export default function NovoCadastro() {
       await setDoc(doc(db, "portalContas", numeroConta), {
         numeroConta, clienteId: cliId, nome: f.nome.trim(), email, whatsappLast4: last4,
         pacote: pacoteNome || "", mensalidade: f.mensalidade.trim(), diaPagamento: f.diaPagamento.trim(),
-        estado: "Activo", ...(promotor ? { promotor } : {}), atualizadoEm: serverTimestamp(),
+        estado: "Activo", ativadoEm: serverTimestamp(), ...(promotor ? { promotor } : {}), atualizadoEm: serverTimestamp(),
       });
       if (email) await setDoc(doc(db, "portalEmails", email), { numeroConta });
 

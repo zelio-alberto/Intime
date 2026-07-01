@@ -12,7 +12,7 @@ import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, Check, Clock, X as XIcon, RefreshCcw, Ban, Copy, Link2,
   Users, UserCheck, Wallet, Wifi, Megaphone, ArrowRight, TrendingUp, ExternalLink,
-  Home, Receipt, Mail, Settings, CheckCircle2, Plus,
+  Home, Receipt, Mail, Settings, CheckCircle2, Plus, FileText,
 } from "lucide-react";
 
 /* ===========================================================================
@@ -33,15 +33,19 @@ function mtValue(v: unknown): number {
 }
 function emAtraso(e?: string) { const x = (e || "").toLowerCase(); return x.includes("atraso") || x.includes("suspens") || x.includes("dívida") || x.includes("divida"); }
 function estadoOk(e?: string) { const x = (e || "").toLowerCase(); return x.includes("activ") || x.includes("ativ") || x.includes("em dia") || x.includes("regular"); }
-function proximaData(d: DocumentData, hoje: Date): Date | null {
-  const due = d.dueDate;
-  if (due instanceof Timestamp) return due.toDate();
-  const dia = parseInt(String(d.diaPagamento ?? "").replace(/[^0-9]/g, ""), 10);
-  if (!dia || dia < 1 || dia > 31) return null;
-  let y = hoje.getFullYear(), m = hoje.getMonth();
-  if (hoje.getDate() > dia) { m++; if (m > 11) { m = 0; y++; } }
-  const ultimo = new Date(y, m + 1, 0).getDate();
-  return new Date(y, m, Math.min(dia, ultimo));
+// Mensalidade a cada 30 dias: a partir do último pagamento aprovado; se ainda
+// não houver, a partir da ativação/criação da conta.
+function proximaData(d: DocumentData, hist: { id: string; d: DocumentData }[]): Date | null {
+  const aprov = (hist || []).find((h) => { const e = String(h.d.estado || "").toLowerCase(); return e.includes("aprov") || e.includes("pago"); });
+  let base: Date | null = null;
+  if (aprov && aprov.d.data instanceof Timestamp) base = aprov.d.data.toDate();
+  else if (d.ativadoEm instanceof Timestamp) base = d.ativadoEm.toDate();
+  else if (d.createdAt instanceof Timestamp) base = d.createdAt.toDate();
+  else if (d.dueDate instanceof Timestamp) return d.dueDate.toDate();
+  if (!base) return null;
+  const next = new Date(base);
+  next.setDate(next.getDate() + 30);
+  return next;
 }
 function dataExtenso(dt: Date) { return `${dt.getDate()} de ${MESES[dt.getMonth() + 1]} de ${dt.getFullYear()}`; }
 function monthKey() { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}`; }
@@ -60,6 +64,47 @@ function fmtData(ts: unknown) {
   return "";
 }
 function estadoStr(d: DocumentData) { return String(d.estado ?? ""); }
+
+// Abre uma fatura Intime (HTML branded) numa janela nova, pronta a imprimir / guardar como PDF.
+function abrirFatura(p: DocumentData, dados: DocumentData, contacts: { email: string; whatsapp: string; phone: string }) {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  const valor = Math.round(Number(p.valor) || 0);
+  const dataPag = p.data instanceof Timestamp ? p.data.toDate() : new Date();
+  const fim = new Date(dataPag); fim.setDate(fim.getDate() + 30);
+  const fmtD = (d: Date) => d.toLocaleDateString("pt-PT", { day: "2-digit", month: "long", year: "numeric" });
+  const fVal = (n: number) => n.toLocaleString("pt-PT");
+  const conta = String(dados.numeroConta || "");
+  const invNo = `INV-${conta}-${p.mes || monthKey()}`.toUpperCase();
+  const pacote = String(dados.pacote || "Serviço de internet Intime");
+  const nome = String(dados.nome || "");
+  const local = [dados.bairro, dados.cidade].filter(Boolean).join(", ");
+  const tel = String(dados.contactoWhatsapp || dados.whatsapp || "");
+  const logo = `${window.location.origin}/logo-intime.png`;
+  w.document.write(`<!doctype html><html lang="pt"><head><meta charset="utf-8"><title>${invNo}</title><style>
+    *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0 auto;padding:36px;max-width:800px;font-size:13px;line-height:1.55}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;background:#f4f5f6;padding:26px;border-radius:10px}
+    .brand{display:flex;align-items:center;gap:10px} .brand img{width:36px;height:36px;object-fit:contain} .brand b{font-size:21px;letter-spacing:3px}
+    .rt{text-align:right} .rt h1{margin:0;font-size:26px} .rt .no{font-weight:bold;margin-top:6px} .rt .meta{color:#555;font-size:12px;margin-top:6px}
+    .to{padding:20px 4px;color:#333} table{width:100%;border-collapse:collapse} th{text-align:left;border-bottom:1px solid #ccc;padding:10px 4px;font-size:12px} td{padding:9px 4px} .r{text-align:right}
+    .tot td{border-top:1px solid #ccc;font-weight:bold} .due{font-size:20px;font-weight:bold;border-top:2px solid #111;padding-top:14px;display:flex;justify-content:space-between;margin-top:10px}
+    .note{color:#555;font-size:12px;margin-top:24px} .foot{text-align:center;color:#666;font-size:11.5px;margin-top:44px;border-top:1px solid #eee;padding-top:16px}
+    @media print{body{padding:14px}}</style></head><body>
+    <div class="head"><div class="brand"><img src="${logo}" alt="Intime"/><b>INTIME</b></div>
+      <div class="rt"><h1>Fatura</h1><div class="no">${invNo}</div><div class="meta">Data: ${fmtD(dataPag)}<br>Conta: ${conta}</div></div></div>
+    <div class="to"><b>${nome}</b>${local ? `<br>${local}` : ""}${tel ? `<br>${tel}` : ""}</div>
+    <table>
+      <tr><th>Descrição</th><th class="r">Qt</th><th class="r">Valor</th></tr>
+      <tr><td>${pacote}<br><span style="color:#777;font-size:11.5px">Período: ${fmtD(dataPag)} – ${fmtD(fim)}</span></td><td class="r">1</td><td class="r">MZN ${fVal(valor)}</td></tr>
+      <tr class="tot"><td>Custo total</td><td></td><td class="r">MZN ${fVal(valor)}</td></tr>
+      <tr><td>Pagamento (${p.metodo || ""}${p.codigo ? " · " + p.codigo : ""})</td><td></td><td class="r">MZN ${fVal(valor)}</td></tr>
+    </table>
+    <div class="due"><span>Total devido</span><span>MZN 0</span></div>
+    <p class="note">Mensalidade referente a 30 dias de serviço de internet Intime. Em caso de dúvida sobre esta fatura, contacte a equipa Intime${contacts.phone ? ` (${contacts.phone})` : ""}.</p>
+    <div class="foot">Intime — Internet Starlink em Moçambique${contacts.email ? ` · ${contacts.email}` : ""}${contacts.phone ? ` · ${contacts.phone}` : ""}<br>Documento processado por computador.</div>
+  </body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => { try { w.print(); } catch { /* */ } }, 400);
+}
 // Upload direto do browser para o Cloudinary (preset unsigned — sem segredos).
 async function uploadCloudinary(file: File, cloudName: string, preset: string, folder: string): Promise<string> {
   const form = new FormData();
@@ -234,7 +279,7 @@ export default function Conta() {
   const content = (() => {
     switch (active) {
       case "inicio": return <ClienteHome dados={dados} hist={hist} go={setSecao} isPromotor={isPromotor} />;
-      case "subscricao": return <ClienteSubscricao conta={conta!} dados={dados} cfg={cfg} showToast={showToast} />;
+      case "subscricao": return <ClienteSubscricao conta={conta!} dados={dados} hist={hist} cfg={cfg} showToast={showToast} />;
       case "pagamentos": return <ClientePagamentos conta={conta!} dados={dados} hist={hist} histLoading={histLoading} cfg={cfg} showToast={showToast} />;
       case "suporte": return <ClienteSuporte conta={conta!} showToast={showToast} />;
       case "promotor": return <PromotorPainel codigo={codigo!} promo={promo!} />;
@@ -350,7 +395,7 @@ function ClienteHome({ dados, hist, go, isPromotor }: { dados: DocumentData; his
   const alvo = processamentoTarget(dados, hist);
   const estado = String(dados.estado ?? "—");
   const atraso = emAtraso(estado);
-  const prox = proximaData(dados, new Date());
+  const prox = proximaData(dados, hist);
   const saldo = atraso ? mtValue(dados.mensalidade) : 0;
 
   const cards: { icon: typeof Wifi; title: string; desc: string; to: string }[] = [
@@ -404,17 +449,17 @@ function ClienteHome({ dados, hist, go, isPromotor }: { dados: DocumentData; his
 }
 
 /* ===================== CLIENTE: SUBSCRIÇÃO ===================== */
-function ClienteSubscricao({ conta, dados, cfg, showToast }: {
-  conta: string; dados: DocumentData; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
+function ClienteSubscricao({ conta, dados, hist, cfg, showToast }: {
+  conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[]; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
 }) {
   const estado = String(dados.estado ?? "—");
-  const prox = proximaData(dados, new Date());
+  const prox = proximaData(dados, hist);
   const rows: [string, string][] = [
     ["Titular", String(dados.nome ?? "—")],
     ["Conta", conta],
     ["Pacote", String(dados.pacote ?? "—")],
     ["Mensalidade", dados.mensalidade ? `${dados.mensalidade} MT` : "—"],
-    ["Dia de pagamento", dados.diaPagamento ? `Dia ${String(dados.diaPagamento).replace(/[^0-9]/g, "")}` : "—"],
+    ["Ciclo", "A cada 30 dias"],
     ["Próximo pagamento", prox ? dataExtenso(prox) : "—"],
   ];
 
@@ -486,7 +531,7 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
   const metodos: MetodoPag[] = ativos.length ? ativos : [{ tipo: "M-Pesa", nome: "Intime", numero: numeroMM }];
 
   const atraso = emAtraso(estadoStr(dados));
-  const prox = proximaData(dados, new Date());
+  const prox = proximaData(dados, hist);
   const saldo = atraso ? mtValue(dados.mensalidade) : 0;
   const alvo = processamentoTarget(dados, hist);
 
@@ -552,7 +597,10 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
                     <div className="text-faint text-xs">{`${d.mes || ""} · ${d.metodo || ""}${d.comprovativoUrl ? " · com foto" : ""}`}</div>
                     <div className="text-faint text-xs">{fmtTs(d.data)}</div>
                   </div>
-                  <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border shrink-0" style={{ color, borderColor: color }}>{estado}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {aprovado && <button onClick={() => abrirFatura(d, dados, cfg.contacts)} className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors" title="Ver / descarregar fatura"><FileText size={12} /> Fatura</button>}
+                    <span className="text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border" style={{ color, borderColor: color }}>{estado}</span>
+                  </div>
                 </div>
               );
             })}
