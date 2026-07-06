@@ -16,6 +16,7 @@ import InboxLayout from './admin/InboxLayout';
 import ConfigLayout from './admin/ConfigLayout';
 import Pedidos from './admin/Pedidos';
 import Mensagens from './admin/Mensagens';
+import SuporteAdmin from './admin/SuporteAdmin';
 import Pacotes from './admin/Pacotes';
 import Contactos from './admin/Contactos';
 import Frases from './admin/Frases';
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="solicitacoes" element={<InboxLayout />}>
             <Route index element={<Pedidos />} />
             <Route path="mensagens" element={<Mensagens />} />
+            <Route path="suporte" element={<SuporteAdmin />} />
           </Route>
           <Route path="financas" element={<Financas />} />
           <Route path="novo" element={<NovoCadastro />} />

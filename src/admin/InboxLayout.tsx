@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Inbox, Mail } from "lucide-react";
+import { Inbox, Mail, LifeBuoy } from "lucide-react";
 
 const SUB = [
   { to: "/admin/solicitacoes", end: true, label: "Instalações", icon: Inbox },
   { to: "/admin/solicitacoes/mensagens", label: "Mensagens", icon: Mail },
+  { to: "/admin/solicitacoes/suporte", label: "Suporte", icon: LifeBuoy },
 ];
 
 function subClass({ isActive }: { isActive: boolean }) {

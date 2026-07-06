@@ -110,13 +110,14 @@ function abrirFatura(p: DocumentData, dados: DocumentData, contacts: { email: st
 function abrirProximaFatura(dados: DocumentData, prox: Date, contacts: { email: string; whatsapp: string; phone: string }) {
   const w = window.open("", "_blank");
   if (!w) return;
-  const valor = Math.round(mtValue(dados.mensalidade));
+  // se houver mudança de pacote agendada, a próxima fatura já vem com o novo valor
+  const valor = Math.round(mtValue(dados.mensalidadePendente || dados.mensalidade));
   const fim = new Date(prox); fim.setDate(fim.getDate() + 30);
   const fmtD = (d: Date) => d.toLocaleDateString("pt-PT", { day: "2-digit", month: "long", year: "numeric" });
   const fVal = (n: number) => n.toLocaleString("pt-PT");
   const conta = String(dados.numeroConta || "");
   const invNo = `INV-${conta}-${prox.getFullYear()}-${String(prox.getMonth() + 1).padStart(2, "0")}-PREV`.toUpperCase();
-  const pacote = String(dados.pacote || "Serviço de internet Intime");
+  const pacote = String(dados.pacotePendente || dados.pacote || "Serviço de internet Intime");
   const nome = String(dados.nome || "");
   const local = [dados.bairro, dados.cidade].filter(Boolean).join(", ");
   const logo = `${window.location.origin}/logo-intime.png`;
@@ -496,8 +497,10 @@ function ClienteHome({ dados, hist, go, isPromotor }: { dados: DocumentData; his
 function ClienteSubscricao({ conta, dados, hist, cfg, showToast }: {
   conta: string; dados: DocumentData; hist: { id: string; d: DocumentData }[]; cfg: ReturnType<typeof useSiteConfig>; showToast: (m: string) => void;
 }) {
+  const [mudar, setMudar] = useState(false);
   const estado = String(dados.estado ?? "—");
   const prox = proximaData(dados, hist);
+  const pendente = dados.pacotePendente ? { pacote: String(dados.pacotePendente), mensalidade: String(dados.mensalidadePendente || "") } : null;
   const rows: [string, string][] = [
     ["Titular", String(dados.nome ?? "—")],
     ["Conta", conta],
@@ -505,6 +508,7 @@ function ClienteSubscricao({ conta, dados, hist, cfg, showToast }: {
     ["Mensalidade", dados.mensalidade ? `${dados.mensalidade} MT` : "—"],
     ["Ciclo", "A cada 30 dias"],
     ["Próximo pagamento", prox ? dataExtenso(prox) : "—"],
+    ...(pendente ? [["Muda para", `${pendente.pacote}${pendente.mensalidade ? ` · ${pendente.mensalidade} MT` : ""} (próximo ciclo)`]] as [string, string][] : []),
   ];
 
   const abrirPedido = async (tipo: string, descricao: string) => {
@@ -513,11 +517,17 @@ function ClienteSubscricao({ conta, dados, hist, cfg, showToast }: {
       showToast(`Pedido enviado: ${tipo}. A equipa vai contactá-lo.`);
     } catch { showToast("Não foi possível enviar. Tente de novo."); }
   };
-  const pedirMudanca = () => {
-    const opts = (cfg.plans || []).map((p) => p.name).filter(Boolean);
-    const lista = opts.length ? "\n• " + opts.join("\n• ") : "";
-    const destino = window.prompt(`Pedir mudança de pacote\nPacote atual: ${dados.pacote || "—"}${lista}\n\nEscreva o pacote desejado:`);
-    if (destino && destino.trim()) abrirPedido("Quero mudar de pacote", `Pacote atual: ${dados.pacote || "—"}. Pacote desejado: ${destino.trim()}.`);
+  const enviarMudanca = async (planoNome: string, novaMensalidade: string) => {
+    try {
+      await addDoc(collection(db, "suporte"), {
+        numeroConta: conta, clienteId: dados.clienteId || "", tipo: "Mudança de pacote",
+        pacoteAtual: dados.pacote || "", pacoteDesejado: planoNome, mensalidadeNova: novaMensalidade,
+        descricao: `Mudar de "${dados.pacote || "—"}" para "${planoNome}"${novaMensalidade ? ` (${novaMensalidade} MT)` : ""} — a partir do próximo ciclo.`,
+        estado: "Recebido", createdAt: serverTimestamp(),
+      });
+      setMudar(false);
+      showToast("Pedido enviado. A mudança entra no próximo ciclo, após a equipa confirmar.");
+    } catch { showToast("Não foi possível enviar. Tente de novo."); }
   };
   const pedirCancelamento = () => {
     if (window.confirm("Vamos abrir um pedido para a equipa o contactar, explicar valores pendentes e combinar a devolução dos equipamentos. A conta NÃO é cancelada automaticamente.\n\nConfirmar pedido de cancelamento?"))
@@ -554,8 +564,84 @@ function ClienteSubscricao({ conta, dados, hist, cfg, showToast }: {
       <div className={panelPad}>
         <h3 className="font-display text-xl text-fg mb-5">Pedidos</h3>
         <div className="grid sm:grid-cols-2 gap-3">
-          <button className={btnGhost} onClick={pedirMudanca}><RefreshCcw size={15} /> Pedir mudança de pacote</button>
+          {pendente
+            ? <div className="border border-accent/40 bg-accent/[0.06] px-4 py-3.5 text-sm text-fg flex items-center gap-2"><RefreshCcw size={15} className="text-accent shrink-0" /> Mudança para <b>{pendente.pacote}</b> agendada para o próximo ciclo.</div>
+            : <button className={btnGhost} onClick={() => setMudar(true)}><RefreshCcw size={15} /> Mudar de pacote</button>}
           <button className={btnGhost + " !text-[#ff6b6b] hover:!border-[#ff6b6b]/50"} onClick={pedirCancelamento}><Ban size={15} /> Pedir cancelamento</button>
+        </div>
+      </div>
+
+      {mudar && <MudarPacoteModal dados={dados} plans={cfg.plans || []} onClose={() => setMudar(false)} onConfirm={enviarMudanca} />}
+    </div>
+  );
+}
+
+/* ---------- modal: escolher novo pacote (estilo "Manage Service Plan") ---------- */
+function MudarPacoteModal({ dados, plans, onClose, onConfirm }: {
+  dados: DocumentData; plans: { id: string; name: string; price: string; unit: string; tagline?: string }[];
+  onClose: () => void; onConfirm: (nome: string, novaMensalidade: string) => Promise<void>;
+}) {
+  const atualNome = String(dados.pacote || "");
+  const atualMens = mtValue(dados.mensalidade);
+  const [sel, setSel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const disponiveis = plans.filter((p) => p.name && p.name !== atualNome);
+  const selPlan = disponiveis.find((p) => p.name === sel);
+  const novaMens = selPlan && selPlan.price !== "Sob" ? String(mtValue(selPlan.price)) : "";
+
+  const confirmar = async () => {
+    if (!selPlan) return;
+    setBusy(true);
+    await onConfirm(selPlan.name, novaMens);
+    setBusy(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative w-full max-w-lg max-h-[85vh] overflow-y-auto bg-bg border border-line">
+        <div className="sticky top-0 bg-bg/95 backdrop-blur border-b border-line px-6 py-4 flex items-center justify-between">
+          <h3 className="font-display text-xl text-fg">Mudar de pacote</h3>
+          <button onClick={onClose} className="w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg"><XIcon size={16} /></button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div>
+            <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">O seu plano atual</div>
+            <div className="border border-accent/40 bg-accent/[0.05] p-4 flex items-center justify-between gap-3">
+              <div className="text-fg font-medium">{atualNome || "—"}</div>
+              <div className="text-fg font-display text-lg">{atualMens ? `${atualMens.toLocaleString("pt-PT")} MT` : "—"}<span className="text-muted text-xs">/mês</span></div>
+            </div>
+          </div>
+          <div>
+            <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-2">Planos disponíveis</div>
+            <div className="space-y-2">
+              {disponiveis.map((p) => {
+                const preco = p.price === "Sob" ? null : mtValue(p.price);
+                const dif = preco != null ? preco - atualMens : null;
+                const on = sel === p.name;
+                return (
+                  <button key={p.id} onClick={() => setSel(p.name)} className={`w-full text-left border p-4 transition-colors ${on ? "border-accent bg-accent/[0.06]" : "border-line hover:border-accent/50"}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-fg font-medium">{p.name}</div>
+                        {p.tagline && <div className="text-muted text-xs mt-0.5">{p.tagline}</div>}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-fg font-display">{preco != null ? `${preco.toLocaleString("pt-PT")} MT` : "Sob avaliação"}</div>
+                        {dif != null && dif !== 0 && <div className={`text-[11px] ${dif > 0 ? "text-[#f5b948]" : "text-accent"}`}>{dif > 0 ? "+" : ""}{dif.toLocaleString("pt-PT")}/mês</div>}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              {disponiveis.length === 0 && <p className="text-faint text-sm">Sem outros planos disponíveis.</p>}
+            </div>
+          </div>
+          <p className="text-faint text-xs">A mudança entra em vigor no <b className="text-muted">próximo ciclo de 30 dias</b> — o ciclo atual mantém-se. A equipa confirma antes de aplicar.</p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className={btnGhost + " !w-auto px-6"}>Cancelar</button>
+            <button onClick={confirmar} disabled={!selPlan || busy} className={btnPrimary}>{busy ? "A enviar…" : "Pedir mudança"}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -601,12 +687,12 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
       </div>
 
       {/* próxima fatura (pré-visualização) */}
-      {prox && mtValue(dados.mensalidade) > 0 && (
+      {prox && mtValue(dados.mensalidadePendente || dados.mensalidade) > 0 && (
         <div className={panelPad + " flex items-center justify-between gap-4 flex-wrap"}>
           <div>
             <div className="text-faint text-[11px] font-mono uppercase tracking-widest mb-1">Próxima fatura</div>
-            <div className="text-fg"><b>{dados.mensalidade} MT</b> · vence {dataExtenso(prox)}</div>
-            <div className="text-muted text-sm mt-0.5">{dados.pacote || ""} · próximo período de 30 dias</div>
+            <div className="text-fg"><b>{dados.mensalidadePendente || dados.mensalidade} MT</b> · vence {dataExtenso(prox)}</div>
+            <div className="text-muted text-sm mt-0.5">{dados.pacotePendente || dados.pacote || ""} · próximo período de 30 dias{dados.pacotePendente ? " · novo pacote" : ""}</div>
           </div>
           <button onClick={() => abrirProximaFatura(dados, prox, cfg.contacts)} className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors"><FileText size={15} /> Pré-visualizar</button>
         </div>
