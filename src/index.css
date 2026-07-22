@@ -117,3 +117,23 @@ html.dark .logo-img { filter: invert(1) brightness(1.9); }
   content: ""; position: absolute; inset: 0; border-radius: 9999px;
   border: 2px solid var(--accent); animation: ringPulse 1.4s ease-out infinite;
 }
+
+/* radar do assistente de pagamento — varrimento + anel a expandir */
+@keyframes radarSweep { to { transform: rotate(360deg); } }
+.radar-sweep {
+  position: absolute; inset: 0; border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 290deg,
+    color-mix(in srgb, var(--accent) 40%, transparent) 350deg, var(--accent) 360deg);
+  animation: radarSweep 2.2s linear infinite;
+}
+@keyframes radarRing {
+  0%   { transform: scale(0.3); opacity: 0.9; }
+  100% { transform: scale(1);   opacity: 0; }
+}
+.radar-ring {
+  position: absolute; inset: 0; border-radius: 9999px;
+  border: 1px solid var(--accent); animation: radarRing 2.2s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .radar-sweep, .radar-ring, .ring-pulse::before { animation: none; }
+}

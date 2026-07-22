@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from "motion/react";
 import Layout from "../components/Layout";
 import { db, auth, googleProvider } from "../firebase";
 import {
@@ -773,9 +774,16 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
   const [codigo, setCodigo] = useState("");
   const [busy, setBusy] = useState(false);
   const [matched, setMatched] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const rm = useReducedMotion();
+
+  // direção da navegação (1 = avançar, -1 = voltar) p/ o deslize dos passos
+  const dirRef = useRef<1 | -1>(1);
+  const go = (s: PagStep, d: 1 | -1 = 1) => { dirRef.current = d; setStep(s); };
 
   const reiniciar = () => {
     setMetodoSel(metodos.length === 1 ? metodos[0] : null);
+    dirRef.current = -1;
     setStep(metodos.length === 1 ? (isMobileMoney(metodos[0]) ? "origem" : "transferir") : "metodo");
     setCodigo(""); setMatched(false);
   };
@@ -813,7 +821,8 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
     if (step !== "verificar") return;
     let alive = true;
     (async () => {
-      const [found] = await Promise.all([scanSms(), new Promise((r) => setTimeout(r, 1800))]);
+      // tempo mínimo p/ o radar e o log de verificação respirarem
+      const [found] = await Promise.all([scanSms(), new Promise((r) => setTimeout(r, 4600))]);
       if (!alive) return;
       if (found) {
         try { await registar("Aprovado", { codigo: (found as DocumentData).codigo || (found as DocumentData).id || "", autoConfirmado: true }); } catch { /* */ }
@@ -855,146 +864,278 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
   const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(`Olá, sou o cliente ${conta}. Preciso de ajuda com um pagamento.`)}`;
   const telUrl = `tel:${contactos.phone || contactos.whatsapp || ""}`;
 
-  // ----- stepper -----
+  const copiar = () => {
+    navigator.clipboard?.writeText(String(metodoSel?.numero || "")).then(() => {
+      setCopiado(true); setTimeout(() => setCopiado(false), 2000);
+    }).catch(() => {});
+  };
+
+  // ----- rail de progresso (a viagem do pagamento) -----
   const fluxo: PagStep[] = isMobileMoney(metodoSel) || !metodoSel ? ["metodo", "origem", "transferir", "verificar"] : ["metodo", "transferir", "verificar"];
-  const idxAtual = Math.max(0, fluxo.indexOf(step === "fallback" || step === "enviado" ? "verificar" : step));
+  const rail = fluxo.filter((f) => f !== "metodo" || metodos.length > 1);
+  const railKey: PagStep = step === "fallback" || step === "enviado" ? "verificar" : step;
+  const atualRail = Math.max(0, rail.indexOf(railKey));
   const stepLabels: Record<string, string> = { metodo: "Método", origem: "Número", transferir: "Transferir", verificar: "Confirmar" };
+  const concluido = step === "enviado";
+
+  const stepVariants = {
+    enter: (d: number) => (rm ? { opacity: 0 } : { opacity: 0, x: 36 * d }),
+    center: { opacity: 1, x: 0 },
+    exit: (d: number) => (rm ? { opacity: 0 } : { opacity: 0, x: -36 * d }),
+  };
 
   return (
     <div className={panelPad + " overflow-hidden"}>
-      {/* cabeçalho + progresso */}
-      <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-        <h3 className="font-display text-xl text-fg">Pagar {valor.toLocaleString("pt-PT")} MT</h3>
-        {step !== "enviado" && (
-          <div className="flex items-center gap-2">
-            {fluxo.filter((f) => f !== "metodo" || metodos.length > 1).map((f, i, arr) => (
-              <div key={f} className="flex items-center gap-2">
-                <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border transition-colors ${idxAtual >= fluxo.indexOf(f) ? "text-accent border-accent/40 bg-accent/10" : "text-faint border-line"}`}>{stepLabels[f]}</span>
-                {i < arr.length - 1 && <span className="w-4 h-px bg-line" />}
+      {/* cabeçalho + rail */}
+      <div className="mb-7">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-5">
+          <h3 className="font-display text-xl text-fg">Pagar {valor.toLocaleString("pt-PT")} MT</h3>
+          <span className="text-[10px] font-mono uppercase tracking-widest text-faint">{concluido ? "Concluído" : `Passo ${atualRail + 1} de ${rail.length}`}</span>
+        </div>
+        <div className="flex items-start">
+          {rail.map((f, i) => {
+            const done = concluido || atualRail > i;
+            const ativo = !concluido && atualRail === i;
+            return (
+              <div key={f} className={"flex items-start" + (i < rail.length - 1 ? " flex-1" : "")}>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div
+                    className={`w-8 h-8 grid place-items-center border font-mono text-[11px] transition-colors duration-300 ${done ? "bg-accent text-bg border-accent" : ativo ? "text-accent border-accent" : "text-faint border-line"}`}
+                    style={ativo && !rm ? { boxShadow: "0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent)" } : undefined}>
+                    {done ? <Check size={13} /> : String(i + 1).padStart(2, "0")}
+                  </div>
+                  <span className={`text-[9px] font-mono uppercase tracking-widest hidden sm:block ${done || ativo ? "text-fg" : "text-faint"}`}>{stepLabels[f]}</span>
+                </div>
+                {i < rail.length - 1 && (
+                  <div className="flex-1 h-px bg-line relative mt-4 mx-2 overflow-hidden">
+                    <motion.div className="absolute inset-y-0 left-0 bg-accent" initial={false}
+                      animate={{ width: done ? "100%" : "0%" }} transition={{ duration: rm ? 0 : 0.6, ease: [0.2, 0.8, 0.2, 1] }} />
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
-      <div key={step} className="step-in">
-        {/* PASSO: MÉTODO */}
-        {step === "metodo" && (
-          <div className="space-y-3">
-            <p className="text-muted text-sm mb-1">Como pretende pagar?</p>
-            {metodos.map((m, i) => (
-              <button key={i} onClick={() => { setMetodoSel(m); setStep(isMobileMoney(m) ? "origem" : "transferir"); }}
-                className="w-full text-left border border-line bg-bg p-5 hover:border-accent/50 transition-colors group flex items-center gap-4">
-                <span className="w-11 h-11 grid place-items-center border border-line text-accent shrink-0"><Wallet size={20} /></span>
-                <div className="flex-1 min-w-0"><div className="text-fg font-medium">{m.tipo}</div>{m.nome && <div className="text-faint text-xs">{m.nome}</div>}</div>
-                <ArrowRight size={18} className="text-faint group-hover:text-fg transition-colors" />
-              </button>
-            ))}
-          </div>
-        )}
+      <AnimatePresence mode="wait" custom={dirRef.current} initial={false}>
+        <motion.div key={step} custom={dirRef.current} variants={stepVariants} initial="enter" animate="center" exit="exit"
+          transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}>
 
-        {/* PASSO: NÚMERO DE ORIGEM */}
-        {step === "origem" && (
-          <div className="space-y-4">
-            <p className="text-muted text-sm">Com que número {metodoSel?.tipo} vai pagar?</p>
-            {numeroDaConta && (
-              <label className="flex items-center gap-3 border border-line bg-bg px-4 py-3.5 cursor-pointer hover:border-accent/40 transition-colors">
-                <input type="checkbox" className="accent-[var(--accent)]" checked={usarConta}
-                  onChange={(e) => { setUsarConta(e.target.checked); if (e.target.checked) setNumeroOrigem(numeroDaConta); }} />
-                <span className="text-sm text-fg">Usar o número da minha conta <span className="font-mono text-muted">({numeroDaConta})</span></span>
-              </label>
-            )}
-            <div>
-              <label className={lbl}>Número de origem</label>
-              <input className={field} inputMode="tel" placeholder="8X XXX XXXX" value={numeroOrigem}
-                onChange={(e) => { setNumeroOrigem(e.target.value); setUsarConta(false); }} />
+          {/* PASSO: MÉTODO */}
+          {step === "metodo" && (
+            <div className="space-y-3">
+              <p className="text-muted text-sm mb-1">Como pretende pagar?</p>
+              {metodos.map((m, i) => (
+                <motion.button key={i}
+                  initial={rm ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 + i * 0.07, duration: 0.3, ease: "easeOut" }}
+                  whileHover={rm ? undefined : { x: 4 }} whileTap={{ scale: 0.99 }}
+                  onClick={() => { setMetodoSel(m); go(isMobileMoney(m) ? "origem" : "transferir"); }}
+                  className="w-full text-left border border-line bg-bg p-5 hover:border-accent/50 transition-colors group flex items-center gap-4">
+                  <span className="w-11 h-11 grid place-items-center border border-line text-accent shrink-0"><Wallet size={20} /></span>
+                  <div className="flex-1 min-w-0"><div className="text-fg font-medium">{m.tipo}</div>{m.nome && <div className="text-faint text-xs">{m.nome}</div>}</div>
+                  <ArrowRight size={18} className="text-faint group-hover:text-fg transition-colors" />
+                </motion.button>
+              ))}
             </div>
-            <div className="flex gap-3">
-              {metodos.length > 1 && <button className={btnGhost + " !w-auto px-6"} onClick={() => setStep("metodo")}>Voltar</button>}
-              <button className={btnPrimary} disabled={numeroOrigem.replace(/\D/g, "").length < 9} onClick={() => setStep("transferir")}>Continuar</button>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* PASSO: TRANSFERIR */}
-        {step === "transferir" && (
-          <div className="space-y-5">
-            <div className="border border-dashed border-accent/40 bg-accent/[0.04] p-6 text-center">
-              <p className="text-muted text-sm">Transfira via <b className="text-fg">{metodoSel?.tipo}</b></p>
-              <div className="font-display text-5xl text-fg my-2">{valor.toLocaleString("pt-PT")} <span className="text-2xl text-muted">MT</span></div>
-              <p className="text-muted text-sm mb-1">para o número de pagamento da Intime:</p>
-              <button onClick={() => { navigator.clipboard?.writeText(String(metodoSel?.numero || "")).then(() => showToast("Número copiado.")).catch(() => {}); }}
-                className="inline-flex items-center gap-2 font-display text-3xl text-accent hover:opacity-80 transition-opacity">
-                {metodoSel?.numero || "(definido pela Intime)"} <Copy size={18} />
-              </button>
-              {metodoSel?.nome && <p className="text-faint text-xs mt-2">Titular: {metodoSel.nome}</p>}
+          {/* PASSO: NÚMERO DE ORIGEM */}
+          {step === "origem" && (
+            <div className="space-y-4">
+              <p className="text-muted text-sm">Com que número {metodoSel?.tipo} vai pagar?</p>
+              {numeroDaConta && (
+                <label className="flex items-center gap-3 border border-line bg-bg px-4 py-3.5 cursor-pointer hover:border-accent/40 transition-colors">
+                  <input type="checkbox" className="accent-[var(--accent)]" checked={usarConta}
+                    onChange={(e) => { setUsarConta(e.target.checked); if (e.target.checked) setNumeroOrigem(numeroDaConta); }} />
+                  <span className="text-sm text-fg">Usar o número da minha conta <span className="font-mono text-muted">({numeroDaConta})</span></span>
+                </label>
+              )}
+              <div>
+                <label className={lbl}>Número de origem</label>
+                <input className={field} inputMode="tel" placeholder="8X XXX XXXX" value={numeroOrigem}
+                  onChange={(e) => { setNumeroOrigem(e.target.value); setUsarConta(false); }} />
+              </div>
+              <div className="flex gap-3">
+                {metodos.length > 1 && <button className={btnGhost + " !w-auto px-6"} onClick={() => go("metodo", -1)}>Voltar</button>}
+                <button className={btnPrimary} disabled={numeroOrigem.replace(/\D/g, "").length < 9} onClick={() => go("transferir")}>Continuar</button>
+              </div>
             </div>
-            <p className="text-muted text-sm text-center">Depois de transferir, confirme abaixo. Vamos procurar o seu pagamento automaticamente.</p>
-            <div className="flex gap-3">
-              {isMobileMoney(metodoSel) && <button className={btnGhost + " !w-auto px-6"} onClick={() => setStep("origem")}>Voltar</button>}
-              <button className={btnPrimary} onClick={() => setStep("verificar")}><Check size={16} /> Já efetuei o pagamento</button>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* PASSO: VERIFICAR (varredura) */}
-        {step === "verificar" && (
-          <div className="py-10 text-center">
-            <div className="ring-pulse relative w-16 h-16 mx-auto grid place-items-center border border-accent/40 rounded-full text-accent mb-6">
-              <RefreshCcw size={24} className="animate-spin" />
+          {/* PASSO: TRANSFERIR — o dinheiro a viajar */}
+          {step === "transferir" && (
+            <div className="space-y-5">
+              <div className="border border-dashed border-accent/40 bg-accent/[0.04] p-6 text-center">
+                <p className="text-muted text-sm">Transfira via <b className="text-fg">{metodoSel?.tipo}</b></p>
+                <div className="font-display text-5xl text-fg my-2"><CountUpMT valor={valor} rm={!!rm} /> <span className="text-2xl text-muted">MT</span></div>
+                <p className="text-muted text-sm mb-1">para o número de pagamento da Intime:</p>
+                <button onClick={copiar}
+                  className="inline-flex items-center gap-2 font-display text-3xl text-accent hover:opacity-80 transition-opacity">
+                  {metodoSel?.numero || "(definido pela Intime)"} {copiado ? <Check size={20} /> : <Copy size={18} />}
+                </button>
+                <div className="h-4 mt-1">
+                  {copiado && <motion.p initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="text-accent text-[10px] font-mono uppercase tracking-widest">Número copiado</motion.p>}
+                </div>
+                {metodoSel?.nome && <p className="text-faint text-xs">Titular: {metodoSel.nome}</p>}
+                <div className="flex items-center justify-center gap-3 mt-5 font-mono text-[10px] uppercase tracking-widest">
+                  <span className="px-2.5 py-1.5 border border-line text-muted">{numeroOrigem.replace(/\D/g, "").slice(-9) || "o seu nº"}</span>
+                  <span className="relative w-16 sm:w-24 h-px bg-line">
+                    {!rm && [0, 1, 2].map((i) => (
+                      <motion.span key={i} className="absolute -top-[2.5px] w-1.5 h-1.5 bg-accent"
+                        animate={{ left: ["-4%", "100%"], opacity: [0, 1, 1, 0] }}
+                        transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.5, ease: "linear" }} />
+                    ))}
+                  </span>
+                  <span className="px-2.5 py-1.5 border border-accent/40 text-accent">Intime</span>
+                </div>
+              </div>
+              <p className="text-muted text-sm text-center">Depois de transferir, confirme abaixo. Vamos procurar o seu pagamento automaticamente.</p>
+              <div className="flex gap-3">
+                {isMobileMoney(metodoSel) && <button className={btnGhost + " !w-auto px-6"} onClick={() => go("origem", -1)}>Voltar</button>}
+                <button className={btnPrimary} onClick={() => go("verificar")}><Check size={16} /> Já efetuei o pagamento</button>
+              </div>
             </div>
-            <h4 className="font-display text-xl text-fg mb-1">A procurar o seu pagamento…</h4>
-            <p className="text-muted text-sm">A verificar as transações {metodoSel?.tipo} recebidas no número da Intime.</p>
-          </div>
-        )}
+          )}
 
-        {/* PASSO: FALLBACK (não encontrado → código ou comprovativo) */}
-        {step === "fallback" && (
-          <div className="space-y-5">
-            <div className="border border-line bg-bg p-5 text-sm text-muted">
-              Ainda não encontrámos o seu pagamento automaticamente — às vezes a confirmação demora um pouco. Ajude-nos a confirmar mais depressa:
+          {/* PASSO: VERIFICAR — radar a escutar a rede */}
+          {step === "verificar" && (
+            <div className="py-8">
+              <div className="relative w-24 h-24 mx-auto mb-6">
+                <div className="absolute inset-0 rounded-full border border-accent/25" />
+                <div className="absolute inset-3 rounded-full border border-accent/15" />
+                <div className="absolute inset-6 rounded-full border border-accent/10" />
+                <span className="radar-ring" />
+                <span className="radar-sweep" />
+                <div className="absolute inset-0 grid place-items-center text-accent"><Wifi size={22} /></div>
+              </div>
+              <h4 className="font-display text-xl text-fg mb-1 text-center">A procurar o seu pagamento…</h4>
+              <p className="text-muted text-sm text-center mb-5">Fique nesta página — demora só uns segundos.</p>
+              <LogVerificacao operadora={metodoSel?.tipo || "M-Pesa"} rm={!!rm} />
             </div>
-            <div>
-              <label className={lbl}>ID / código da transação</label>
-              <input className={field + " mb-3"} placeholder="Ex.: CI8R4T2X9P" spellCheck={false} value={codigo} onChange={(e) => setCodigo(e.target.value)} />
-              <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A confirmar…" : "Confirmar com o código"}</button>
-            </div>
-            <div className="flex items-center gap-4 text-faint text-xs"><span className="flex-1 h-px bg-line" /> ou <span className="flex-1 h-px bg-line" /></div>
-            {podeFoto ? (
-              <label className={btnGhost + " cursor-pointer"}>
-                <Upload size={15} /> {busy ? "A enviar…" : "Anexar foto do comprovativo"}
-                <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
-              </label>
-            ) : (
-              <a href={waUrl} target="_blank" rel="noopener" className={btnGhost}>
-                <Mail size={15} /> Enviar comprovativo pelo WhatsApp
-              </a>
-            )}
-            <button className="w-full text-center text-muted text-sm hover:text-fg transition-colors" onClick={() => setStep("verificar")}>Tentar procurar de novo</button>
-          </div>
-        )}
+          )}
 
-        {/* PASSO: ENVIADO (confirmação animada) */}
-        {step === "enviado" && (
-          <div className="py-8 text-center">
-            <div className={`pop-in w-20 h-20 mx-auto grid place-items-center rounded-full mb-5 ${matched ? "bg-accent text-bg" : "border-2 border-accent text-accent"}`}>
-              <Check size={38} />
+          {/* PASSO: FALLBACK (não encontrado → código ou comprovativo) */}
+          {step === "fallback" && (
+            <div className="space-y-5">
+              <div className="border border-line bg-bg p-5 text-sm text-muted">
+                Ainda não encontrámos o seu pagamento automaticamente — às vezes a confirmação demora um pouco. Ajude-nos a confirmar mais depressa:
+              </div>
+              <div>
+                <label className={lbl}>ID / código da transação</label>
+                <input className={field + " mb-3"} placeholder="Ex.: CI8R4T2X9P" spellCheck={false} value={codigo} onChange={(e) => setCodigo(e.target.value)} />
+                <button className={btnPrimary} disabled={busy} onClick={submeterCodigo}>{busy ? "A confirmar…" : "Confirmar com o código"}</button>
+              </div>
+              <div className="flex items-center gap-4 text-faint text-xs"><span className="flex-1 h-px bg-line" /> ou <span className="flex-1 h-px bg-line" /></div>
+              {podeFoto ? (
+                <label className={btnGhost + " cursor-pointer"}>
+                  <Upload size={15} /> {busy ? "A enviar…" : "Anexar foto do comprovativo"}
+                  <input type="file" accept="image/*" className="hidden" disabled={busy} onChange={(e) => enviarComprovativo(e.target.files?.[0])} />
+                </label>
+              ) : (
+                <a href={waUrl} target="_blank" rel="noopener" className={btnGhost}>
+                  <Mail size={15} /> Enviar comprovativo pelo WhatsApp
+                </a>
+              )}
+              <button className="w-full text-center text-muted text-sm hover:text-fg transition-colors" onClick={() => go("verificar")}>Tentar procurar de novo</button>
             </div>
-            <h4 className="font-display text-2xl text-fg mb-2">{matched ? "Pagamento confirmado!" : "Pagamento recebido"}</h4>
-            <p className="text-muted text-sm max-w-md mx-auto">
-              {matched
-                ? "Encontrámos a sua transação e a sua conta vai ser atualizada já a seguir. Obrigado!"
-                : "Recebemos os seus dados. A confirmação costuma demorar até 10 minutos (muitas vezes menos)."}
-            </p>
-            <p className="text-faint text-sm mt-4">Está com alguma dificuldade? Fale connosco:</p>
-            <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
-              <a href={waUrl} target="_blank" rel="noopener" className="inline-flex items-center gap-2 px-5 py-2.5 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">WhatsApp</a>
-              <a href={telUrl} className="inline-flex items-center gap-2 px-5 py-2.5 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">Ligar</a>
+          )}
+
+          {/* PASSO: ENVIADO — celebração */}
+          {step === "enviado" && (
+            <div className="py-8 text-center">
+              <div className="relative w-20 h-20 mx-auto mb-5">
+                {!rm && (
+                  <motion.span className="absolute inset-0 rounded-full border-2 border-accent"
+                    initial={{ scale: 0.6, opacity: 0.9 }} animate={{ scale: 2, opacity: 0 }}
+                    transition={{ duration: 0.9, delay: 0.25, ease: "easeOut" }} />
+                )}
+                {!rm && matched && PARTICULAS.map((a, i) => (
+                  <motion.span key={a} className="absolute left-1/2 top-1/2 w-1.5 h-1.5 bg-accent"
+                    initial={{ x: -3, y: -3, opacity: 1, scale: 1 }}
+                    animate={{ x: Math.cos((a * Math.PI) / 180) * 74 - 3, y: Math.sin((a * Math.PI) / 180) * 74 - 3, opacity: 0, scale: 0.3 }}
+                    transition={{ duration: 0.9, delay: 0.3 + (i % 4) * 0.04, ease: "easeOut" }} />
+                ))}
+                <motion.div initial={rm ? false : { scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 18 }}
+                  className={`w-20 h-20 grid place-items-center rounded-full ${matched ? "bg-accent text-bg" : "border-2 border-accent text-accent"}`}>
+                  {matched ? (
+                    <svg viewBox="0 0 52 52" className="w-9 h-9" aria-hidden>
+                      <motion.path d="M13 27l9 9 17-18" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="square"
+                        initial={{ pathLength: rm ? 1 : 0 }} animate={{ pathLength: 1 }}
+                        transition={{ duration: 0.45, delay: 0.15, ease: "easeOut" }} />
+                    </svg>
+                  ) : <Clock size={34} />}
+                </motion.div>
+              </div>
+              <motion.h4 initial={rm ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                className="font-display text-2xl text-fg mb-3">{matched ? "Pagamento confirmado!" : "Pagamento recebido"}</motion.h4>
+              <motion.div initial={rm ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest px-3 py-1.5 border border-accent/40 text-accent mb-3">
+                  {valor.toLocaleString("pt-PT")} MT · {metodoSel?.tipo || "M-Pesa"}
+                </span>
+                <p className="text-muted text-sm max-w-md mx-auto">
+                  {matched
+                    ? "Encontrámos a sua transação e a sua conta vai ser atualizada já a seguir. Obrigado!"
+                    : "Recebemos os seus dados. A confirmação costuma demorar até 10 minutos (muitas vezes menos)."}
+                </p>
+                <p className="text-faint text-sm mt-4">Está com alguma dificuldade? Fale connosco:</p>
+                <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
+                  <a href={waUrl} target="_blank" rel="noopener" className="inline-flex items-center gap-2 px-5 py-2.5 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">WhatsApp</a>
+                  <a href={telUrl} className="inline-flex items-center gap-2 px-5 py-2.5 border border-line text-fg font-mono text-[10px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors">Ligar</a>
+                </div>
+                <button className="mt-6 text-muted text-sm underline underline-offset-4 hover:text-fg transition-colors" onClick={reiniciar}>Fazer outro pagamento</button>
+              </motion.div>
             </div>
-            <button className="mt-6 text-muted text-sm underline underline-offset-4 hover:text-fg transition-colors" onClick={reiniciar}>Fazer outro pagamento</button>
-          </div>
-        )}
-      </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/* ângulos das partículas da celebração */
+const PARTICULAS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
+
+/* valor que conta de 0 até à mensalidade (passo Transferir) */
+function CountUpMT({ valor, rm }: { valor: number; rm: boolean }) {
+  const mv = useMotionValue(rm ? valor : 0);
+  const [txt, setTxt] = useState((rm ? valor : 0).toLocaleString("pt-PT"));
+  useEffect(() => {
+    if (rm) { setTxt(valor.toLocaleString("pt-PT")); return; }
+    const ctrl = animate(mv, valor, { duration: 1.1, ease: [0.2, 0.8, 0.2, 1] });
+    const unsub = mv.on("change", (v) => setTxt(Math.round(v).toLocaleString("pt-PT")));
+    return () => { ctrl.stop(); unsub(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valor, rm]);
+  return <>{txt}</>;
+}
+
+/* log ao vivo da verificação (passo Confirmar) — sincronizado com o tempo mínimo da varredura */
+function LogVerificacao({ operadora, rm }: { operadora: string; rm: boolean }) {
+  const msgs = [
+    `A ligar à rede ${operadora}…`,
+    "A ler as transações recebidas no número da Intime…",
+    "A comparar o valor e o número de origem…",
+  ];
+  const [fase, setFase] = useState(0);
+  useEffect(() => {
+    const t1 = setTimeout(() => setFase(1), 1500);
+    const t2 = setTimeout(() => setFase(2), 3100);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+  return (
+    <div className="max-w-md mx-auto border border-line bg-bg p-4 font-mono text-xs space-y-2.5">
+      {msgs.slice(0, fase + 1).map((m, i) => {
+        const done = i < fase;
+        return (
+          <motion.div key={m} initial={rm ? false : { opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25 }} className="flex items-start gap-2.5">
+            {done ? <Check size={13} className="text-accent mt-px shrink-0" /> : <span className="w-2 h-2 mt-1 bg-accent animate-pulse shrink-0" />}
+            <span className={done ? "text-faint" : "text-fg"}>{m}</span>
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
