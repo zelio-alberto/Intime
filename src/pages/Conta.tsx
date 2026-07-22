@@ -810,7 +810,8 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
         const v = typeof t.valor === "number" ? t.valor : 0;
         const ts = t.createdAt instanceof Timestamp ? t.createdAt.toMillis() : now;
         const recente = (now - ts) < 1000 * 60 * 60 * 24;
-        return (valor === 0 || v + 0.01 >= valor) && recente;
+        const livre = !t.pagamentoId && !t.numeroConta; // ainda não ligada a nenhum pagamento
+        return (valor === 0 || v + 0.01 >= valor) && recente && livre;
       });
       return m || null;
     } catch { return null; }
@@ -825,7 +826,9 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
       const [found] = await Promise.all([scanSms(), new Promise((r) => setTimeout(r, 4600))]);
       if (!alive) return;
       if (found) {
-        try { await registar("Aprovado", { codigo: (found as DocumentData).codigo || (found as DocumentData).id || "", autoConfirmado: true }); } catch { /* */ }
+        // regista Pendente: quem aprova (e carimba a transação como usada) é o
+        // confirmador no servidor — o código fica de uso único.
+        try { await registar("Pendente", { codigo: (found as DocumentData).codigo || (found as DocumentData).id || "" }); } catch { /* */ }
         setMatched(true); setStep("enviado");
       } else {
         setStep("fallback");
@@ -840,10 +843,25 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
     if (c.length < 6) { showToast("Insira o código da transação."); return; }
     setBusy(true);
     try {
-      let estado = "Pendente";
-      try { const t = await getDoc(doc(db, "transacoesMpesa", c)); if (t.exists()) { const v = typeof t.data().valor === "number" ? t.data().valor as number : 0; if (valor === 0 || v + 0.01 >= valor) estado = "Aprovado"; } } catch { /* */ }
-      await registar(estado, { codigo: c });
-      setMatched(estado === "Aprovado"); setStep("enviado");
+      // valida o código: tem de existir, o valor chegar e NUNCA ter sido usado
+      // noutro pagamento (um código de transação só serve uma vez).
+      let valido = false;
+      try {
+        const t = await getDoc(doc(db, "transacoesMpesa", c));
+        if (t.exists()) {
+          const d = t.data();
+          if (d.pagamentoId || d.numeroConta) {
+            showToast("Este código já foi usado num pagamento anterior. Envie o comprovativo ou fale connosco.");
+            setBusy(false); return;
+          }
+          const v = typeof d.valor === "number" ? d.valor as number : 0;
+          if (valor === 0 || v + 0.01 >= valor) valido = true;
+        }
+      } catch { /* sem acesso à transação → segue como pendente p/ revisão */ }
+      // regista Pendente: a aprovação (e o carimbo de "usada" na transação) é
+      // feita pelo confirmador no servidor, em 1–2 minutos.
+      await registar("Pendente", { codigo: c });
+      setMatched(valido); setStep("enviado");
     } catch { showToast("Erro ao submeter. Tente de novo."); }
     finally { setBusy(false); }
   };
