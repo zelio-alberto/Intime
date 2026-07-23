@@ -1122,6 +1122,11 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
                 <span className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest px-3 py-1.5 border border-accent/40 text-accent mb-3">
                   {valor.toLocaleString("pt-PT")} MT · {metodoSel?.tipo || "M-Pesa"}
                 </span>
+                {matched && (
+                  <p className="text-fg text-sm mb-2">
+                    A sua subscrição renova a <b>{dataExtenso(new Date((cicloInicio ? cicloInicio.getTime() : Date.now()) + 30 * 86400000))}</b>.
+                  </p>
+                )}
                 <p className="text-muted text-sm max-w-md mx-auto">
                   {matched
                     ? "Encontrámos a sua transação e a sua conta vai ser atualizada já a seguir. Obrigado!"
