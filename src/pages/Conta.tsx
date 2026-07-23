@@ -39,7 +39,10 @@ function estadoOk(e?: string) { const x = (e || "").toLowerCase(); return x.incl
 function proximaData(d: DocumentData, hist: { id: string; d: DocumentData }[]): Date | null {
   const aprov = (hist || []).find((h) => { const e = String(h.d.estado || "").toLowerCase(); return e.includes("aprov") || e.includes("pago"); });
   let base: Date | null = null;
-  if (aprov && aprov.d.data instanceof Timestamp) base = aprov.d.data.toDate();
+  // pagamento adiantado carimba cicloInicio (= vencimento pago): o ciclo seguinte
+  // conta a partir daí, para o cliente não perder dias por pagar antes.
+  if (aprov && aprov.d.cicloInicio instanceof Timestamp) base = aprov.d.cicloInicio.toDate();
+  else if (aprov && aprov.d.data instanceof Timestamp) base = aprov.d.data.toDate();
   else if (d.ativadoEm instanceof Timestamp) base = d.ativadoEm.toDate();
   else if (d.createdAt instanceof Timestamp) base = d.createdAt.toDate();
   else if (d.dueDate instanceof Timestamp) return d.dueDate.toDate();
@@ -666,6 +669,11 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
   const saldo = atraso ? mtValue(dados.mensalidade) : 0;
   const alvo = processamentoTarget(dados, hist);
 
+  // pagamento adiantado da próxima fatura (aberto pelo botão "Pagar agora")
+  const [pagarProxima, setPagarProxima] = useState(false);
+  const valorProx = mtValue(dados.mensalidadePendente || dados.mensalidade);
+  const mesProx = prox ? `${prox.getFullYear()}-${String(prox.getMonth() + 1).padStart(2, "0")}` : undefined;
+
   return (
     <div className="space-y-6">
       {alvo && <ProcessamentoBanner target={alvo} />}
@@ -695,20 +703,29 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
             <div className="text-fg"><b>{dados.mensalidadePendente || dados.mensalidade} MT</b> · vence {dataExtenso(prox)}</div>
             <div className="text-muted text-sm mt-0.5">{dados.pacotePendente || dados.pacote || ""} · próximo período de 30 dias{dados.pacotePendente ? " · novo pacote" : ""}</div>
           </div>
-          <button onClick={() => abrirProximaFatura(dados, prox, cfg.contacts)} className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors"><FileText size={15} /> Pré-visualizar</button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button onClick={() => abrirProximaFatura(dados, prox, cfg.contacts)} className="inline-flex items-center gap-2 px-5 py-3 border border-line text-fg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors"><FileText size={15} /> Pré-visualizar</button>
+            {!atraso && !alvo && !pagarProxima && (
+              <button onClick={() => setPagarProxima(true)} className="inline-flex items-center gap-2 px-5 py-3 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors"><Wallet size={15} /> Pagar agora</button>
+            )}
+          </div>
         </div>
       )}
 
-      {/* PAGAR — só disponível quando há dívida e não está já em processamento */}
+      {/* PAGAR — quando há dívida, ou adiantado (próxima fatura) a pedido */}
       {alvo
         ? null
         : atraso
         ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} cloudinary={cfg.cloudinary} showToast={showToast} />
+        : pagarProxima && prox && valorProx > 0
+        ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} cloudinary={cfg.cloudinary} showToast={showToast}
+            valorOverride={valorProx} mes={mesProx} cicloInicio={prox}
+            subtitulo={`Próxima fatura · vence ${dataExtenso(prox)}`} onFechar={() => setPagarProxima(false)} />
         : (
           <div className={panelPad + " text-center"}>
             <CheckCircle2 className="mx-auto mb-3 text-accent" size={30} />
             <h3 className="font-display text-2xl text-fg mb-1">Sem nada a pagar</h3>
-            <p className="text-muted text-sm">A sua conta está em dia. Quando houver um valor a pagar, o botão de pagamento aparece aqui.</p>
+            <p className="text-muted text-sm">A sua conta está em dia. Pode antecipar a próxima fatura com o botão "Pagar agora" acima.</p>
           </div>
         )}
 
@@ -758,13 +775,16 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
 type PagStep = "metodo" | "origem" | "transferir" | "verificar" | "fallback" | "enviado";
 function isMobileMoney(m?: MetodoPag) { const t = String(m?.tipo || "").toLowerCase(); return t.includes("pesa") || t.includes("mola"); }
 
-function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToast }: {
+function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToast, valorOverride, mes, cicloInicio, subtitulo, onFechar }: {
   conta: string; dados: DocumentData; metodos: MetodoPag[];
   contactos: { email: string; whatsapp: string; phone: string };
   cloudinary: { cloudName: string; uploadPreset: string }; showToast: (m: string) => void;
+  // pagamento adiantado da próxima fatura: valor/mês próprios + início do ciclo
+  // (para o vencimento seguinte contar a partir do vencimento, não da data do pagamento)
+  valorOverride?: number; mes?: string; cicloInicio?: Date; subtitulo?: string; onFechar?: () => void;
 }) {
   const podeFoto = !!(cloudinary?.cloudName && cloudinary?.uploadPreset);
-  const valor = mtValue(dados.mensalidade);
+  const valor = valorOverride ?? mtValue(dados.mensalidade);
   const numeroDaConta = String(dados.contactoWhatsapp || dados.whatsapp || "").trim();
 
   const [step, setStep] = useState<PagStep>(metodos.length === 1 ? (isMobileMoney(metodos[0]) ? "origem" : "transferir") : "metodo");
@@ -791,9 +811,10 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
   const registar = async (estado: string, extra: Record<string, unknown>) => {
     await addDoc(collection(db, "pagamentos"), {
       clienteId: dados.clienteId || "", numeroConta: conta, clienteNome: dados.nome || "",
-      mes: monthKey(), valor, metodo: metodoSel?.tipo || "M-Pesa", estado, viaPortal: true,
+      mes: mes || monthKey(), valor, metodo: metodoSel?.tipo || "M-Pesa", estado, viaPortal: true,
       numeroOrigem: numeroOrigem.replace(/\D/g, "") || null,
       ...(dados.promotor ? { promotor: dados.promotor } : {}),
+      ...(cicloInicio ? { cicloInicio: Timestamp.fromDate(cicloInicio) } : {}),
       data: serverTimestamp(), ...extra,
     });
   };
@@ -907,8 +928,16 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
       {/* cabeçalho + rail */}
       <div className="mb-7">
         <div className="flex items-center justify-between gap-4 flex-wrap mb-5">
-          <h3 className="font-display text-xl text-fg">Pagar {valor.toLocaleString("pt-PT")} MT</h3>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-faint">{concluido ? "Concluído" : `Passo ${atualRail + 1} de ${rail.length}`}</span>
+          <div>
+            <h3 className="font-display text-xl text-fg">Pagar {valor.toLocaleString("pt-PT")} MT</h3>
+            {subtitulo && <p className="text-muted text-xs mt-0.5">{subtitulo}</p>}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-faint">{concluido ? "Concluído" : `Passo ${atualRail + 1} de ${rail.length}`}</span>
+            {onFechar && !concluido && (
+              <button onClick={onFechar} className="w-7 h-7 grid place-items-center border border-line text-faint hover:text-fg hover:border-accent/50 transition-colors" title="Fechar"><XIcon size={14} /></button>
+            )}
+          </div>
         </div>
         <div className="flex items-start">
           {rail.map((f, i) => {
