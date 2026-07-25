@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, query, orderBy, limit, addDoc, updateDoc, doc, getDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, where, addDoc, updateDoc, doc, getDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
 import { monthKey, fmtMoney, kitAlocado, logMov } from "./gestaoUtils";
@@ -14,6 +14,7 @@ const up = (s: any) => String(s || "").trim().toUpperCase();
 
 export default function Transacoes() {
   const [txs, setTxs] = useState<Tx[]>([]);
+  const [txsAssoc, setTxsAssoc] = useState<Tx[]>([]);
   const [pagsByCodigo, setPagsByCodigo] = useState<Record<string, { numeroConta: string; clienteNome: string }>>({});
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState<"todas" | "assoc" | "porassoc">("todas");
@@ -67,6 +68,9 @@ export default function Transacoes() {
     const u1 = onSnapshot(query(collection(db, "transacoesMpesa"), orderBy("createdAt", "desc"), limit(300)),
       (s) => { setTxs(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))); setLoading(false); },
       () => setLoading(false));
+    // As associadas carregam-se todas (sem limite) — as antigas caem fora das 300 recentes mas têm de aparecer na lista.
+    const u1b = onSnapshot(query(collection(db, "transacoesMpesa"), where("estado", "==", "associado")),
+      (s) => setTxsAssoc(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
     const u2 = onSnapshot(collection(db, "pagamentos"), (s) => {
       const map: Record<string, { numeroConta: string; clienteNome: string }> = {};
       s.docs.forEach((d) => {
@@ -76,15 +80,20 @@ export default function Transacoes() {
       setPagsByCodigo(map);
     }, () => {});
     const u3 = onSnapshot(collection(db, "kits"), (s) => setKits(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
-    return () => { u1(); u2(); u3(); };
+    return () => { u1(); u1b(); u2(); u3(); };
   }, []);
 
-  const enriched = useMemo(() => txs.map((t) => {
-    const liga = pagsByCodigo[up(t.codigo)];
-    const conta = t.numeroConta || liga?.numeroConta || "";
-    const assoc = !!conta || !!t.clienteId || String(t.estado || "").toLowerCase() === "associado";
-    return { ...t, _assoc: assoc, _conta: conta, _cliente: liga?.clienteNome || t.nome || "" };
-  }), [txs, pagsByCodigo]);
+  const enriched = useMemo(() => {
+    const vistos = new Set(txs.map((t) => t.id));
+    const todas = [...txs, ...txsAssoc.filter((t) => !vistos.has(t.id))];
+    todas.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
+    return todas.map((t) => {
+      const liga = pagsByCodigo[up(t.codigo)];
+      const conta = t.numeroConta || liga?.numeroConta || "";
+      const assoc = !!conta || !!t.clienteId || String(t.estado || "").toLowerCase() === "associado";
+      return { ...t, _assoc: assoc, _conta: conta, _cliente: liga?.clienteNome || t.nome || "" };
+    });
+  }, [txs, txsAssoc, pagsByCodigo]);
 
   const total = enriched.length;
   const nAssoc = enriched.filter((t) => t._assoc).length;
