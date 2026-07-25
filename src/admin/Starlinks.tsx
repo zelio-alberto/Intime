@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot, type DocumentData } from "firebase/firestore";
+import { collection, onSnapshot, doc, updateDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { fmtMoney, parseMoney, starlinkOf, margemMensal, kitAlocado, estadoPillCls } from "./gestaoUtils";
-import { Search, Satellite } from "lucide-react";
+import { fmtMoney, parseMoney, starlinkOf, margemMensal, kitAlocado, estadoPillCls, logMov } from "./gestaoUtils";
+import { Search, Satellite, Pencil, Check, X } from "lucide-react";
 
 type Kit = { id: string } & DocumentData;
 
@@ -12,6 +12,18 @@ export default function Starlinks() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<"todos" | "alocados" | "livres">("todos");
+  const [editCusto, setEditCusto] = useState<string | null>(null);
+  const [custoVal, setCustoVal] = useState("");
+
+  // O custo de compra do kit alimenta o Masterfile (investimento) — edita-se aqui.
+  const guardarCusto = async (k: Kit) => {
+    const v = parseMoney(custoVal);
+    try {
+      await updateDoc(doc(db, "kits", k.id), { custoAquisicao: String(v || ""), updatedAt: serverTimestamp() });
+      await logMov("estado", `Custo de aquisição do kit ${k.cliente || k.conta || k.id} → ${fmtMoney(v)}`, { kitId: k.id, valor: v });
+    } catch { /* */ }
+    setEditCusto(null);
+  };
 
   useEffect(() => {
     const u = onSnapshot(collection(db, "kits"),
@@ -92,6 +104,19 @@ export default function Starlinks() {
                   <div className="self-center text-sm">
                     <div className="text-muted">{sl?.amount ? String(sl.amount) : "—"}</div>
                     {aloc && <div className={margem >= 0 ? "text-accent" : "text-[#ff6b6b]"}>{margem >= 0 ? "+" : ""}{fmtMoney(margem)}</div>}
+                    {editCusto === k.id ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <input autoFocus value={custoVal} onChange={(e) => setCustoVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") guardarCusto(k); if (e.key === "Escape") setEditCusto(null); }}
+                          inputMode="decimal" placeholder="14290" className="w-24 bg-bg border border-line px-2 py-1 text-xs text-fg outline-none focus:border-accent" />
+                        <button onClick={() => guardarCusto(k)} className="w-6 h-6 grid place-items-center border border-line text-accent hover:bg-fg/10"><Check size={12} /></button>
+                        <button onClick={() => setEditCusto(null)} className="w-6 h-6 grid place-items-center border border-line text-muted hover:text-fg"><X size={12} /></button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setEditCusto(k.id); setCustoVal(String(parseMoney(k.custoAquisicao) || "")); }}
+                        className="flex items-center gap-1 text-faint text-xs mt-1 hover:text-fg transition-colors" title="Custo de compra do kit (investimento no Masterfile)">
+                        Compra: {k.custoAquisicao ? fmtMoney(parseMoney(k.custoAquisicao)) : "—"} <Pencil size={10} />
+                      </button>
+                    )}
                   </div>
                   <span className={`justify-self-start lg:justify-self-end text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border self-center ${estadoPillCls(String(k.estado || (aloc ? "Alugado" : "Livre")))}`}>{k.estado || (aloc ? "Alugado" : "Livre")}</span>
                 </div>

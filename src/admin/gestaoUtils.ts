@@ -1,5 +1,5 @@
 // Utilitários partilhados das páginas de gestão na web (porto de data.dart).
-import { Timestamp, addDoc, collection, doc, setDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
+import { Timestamp, addDoc, collection, serverTimestamp, type DocumentData } from "firebase/firestore";
 import { db, auth } from "../firebase";
 
 // Regista um movimento no livro central (não falha o fluxo se der erro).
@@ -10,23 +10,6 @@ export async function logMov(tipo: string, descricao: string, opts?: { kitId?: s
       kitId: opts?.kitId || "", clienteId: opts?.clienteId || "", valor: opts?.valor || 0,
       by: auth.currentUser?.email || "", at: serverTimestamp(),
     });
-  } catch { /* */ }
-}
-
-// Regista no Masterfile a saída do plano Starlink de um kit (idempotente por kit+mês:
-// re-marcar o mesmo mês reescreve o mesmo doc, nunca duplica a despesa).
-export async function registarDespesaStarlink(kit: { id: string } & DocumentData, mes = monthKey()) {
-  try {
-    const valor = parseMoney(starlinkOf(kit)?.amount);
-    await setDoc(doc(db, "despesas", `sl_${kit.id}_${mes}`), {
-      tipo: "starlink",
-      descricao: `Plano Starlink ${monthLabel(mes)} — ${kit.cliente || kit.conta || "kit"}`,
-      fornecedor: "Starlink", valor,
-      kitId: kit.id, kitNome: String(kit.cliente || kit.conta || ""),
-      mes, data: Timestamp.now(),
-      by: auth.currentUser?.email || "", createdAt: serverTimestamp(),
-    }, { merge: true });
-    await logMov("despesa", `Pago à Starlink ${fmtMoney(valor)} (${monthLabel(mes)})`, { kitId: kit.id, valor });
   } catch { /* */ }
 }
 

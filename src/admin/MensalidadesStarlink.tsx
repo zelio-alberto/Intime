@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { registarDespesaStarlink } from "./gestaoUtils";
 import { Satellite, Check, AlertTriangle, Search, BadgeCheck, RefreshCw } from "lucide-react";
 
 type Kit = { id: string } & Record<string, any>;
@@ -73,7 +72,6 @@ export default function MensalidadesStarlink() {
     setMarcando(k.id);
     try {
       await setDoc(doc(db, "kits", k.id), { starlinkPagoMes: monthKey(), starlinkPagoEm: serverTimestamp() }, { merge: true });
-      await registarDespesaStarlink(k, monthKey());
     } catch { /* */ }
     finally { setMarcando(null); }
   };
