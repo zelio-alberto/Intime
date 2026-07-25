@@ -33,6 +33,7 @@ import Contratos from './admin/Contratos';
 import Mapa from './admin/Mapa';
 import NovoCadastro from './admin/NovoCadastro';
 import Financas from './admin/Financas';
+import Masterfile from './admin/Masterfile';
 
 export default function App() {
   return (
@@ -60,6 +61,7 @@ export default function App() {
             <Route path="suporte" element={<SuporteAdmin />} />
           </Route>
           <Route path="financas" element={<Financas />} />
+          <Route path="masterfile" element={<Masterfile />} />
           <Route path="novo" element={<NovoCadastro />} />
           <Route path="clientes" element={<Clientes />} />
           <Route path="starlinks" element={<Starlinks />} />

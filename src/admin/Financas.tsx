@@ -3,7 +3,7 @@ import { collection, onSnapshot, doc, updateDoc, type DocumentData } from "fireb
 import { db } from "../firebase";
 import { useSiteConfig } from "../useSiteConfig";
 import { pageTitle } from "./ui";
-import { parseMoney, fmtMoney, monthKey, monthLabel, daysUntil, kitAlocado, starlinkOf, logMov, estadoPillCls } from "./gestaoUtils";
+import { parseMoney, fmtMoney, monthKey, monthLabel, daysUntil, kitAlocado, starlinkOf, registarDespesaStarlink, estadoPillCls } from "./gestaoUtils";
 import { MessageCircle, Check, CheckCircle2 } from "lucide-react";
 
 type Kit = { id: string } & DocumentData;
@@ -84,7 +84,7 @@ export default function Financas() {
   const marcarPagoStarlink = async (k: Kit) => {
     try {
       await updateDoc(doc(db, "kits", k.id), { starlinkPagoMes: mes });
-      await logMov("estado", `Plano Starlink pago à Starlink (${monthLabel(mes)})`, { kitId: k.id, clienteId: String(k.clienteId || "") });
+      await registarDespesaStarlink(k, mes);
     } catch { /* */ }
   };
   const nomeKit = (k: Kit) => (String(k.cliente || "").length ? k.cliente : (k.conta || "Starlink"));

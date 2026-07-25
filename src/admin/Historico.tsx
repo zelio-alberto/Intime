@@ -3,7 +3,7 @@ import { collection, onSnapshot, query, orderBy, limit, type DocumentData } from
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
 import { fmtMoney, fmtDateTime } from "./gestaoUtils";
-import { Search, Receipt, Satellite, User, FileText, Activity, Wifi } from "lucide-react";
+import { Search, Receipt, Satellite, User, FileText, Activity, Wifi, Wallet } from "lucide-react";
 
 type Mov = { id: string } & DocumentData;
 
@@ -14,6 +14,7 @@ const TIPOS: Record<string, { label: string; icon: typeof Receipt; color: string
   starlink: { label: "Starlink", icon: Wifi, color: "#00E5FF" },
   cliente: { label: "Cliente", icon: User, color: "#5cf2c8" },
   contrato: { label: "Contrato", icon: FileText, color: "#ff9f6b" },
+  despesa: { label: "Despesa", icon: Wallet, color: "#ff6b6b" },
 };
 
 export default function Historico() {
