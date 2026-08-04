@@ -27,10 +27,18 @@ export type PaymentMethod = {
   ativo?: boolean;    // aparece (ou não) na lista do cliente
 };
 
+export type TaxaInstalacao = {
+  valor: string;    // ex: "5.000" — vazio = não mostrar valor concreto
+  unidade: string;  // ex: "MT"
+  nota: string;     // texto explicativo (pagamento único, o que cobre, variações)
+  mostrar: boolean; // liga/desliga a exibição do valor no site
+};
+
 export type SiteConfig = {
   contacts: { email: string; whatsapp: string; phone: string };
   hero: { priceLabel: string; price: string; unit: string };
   plans: Plan[];
+  taxaInstalacao: TaxaInstalacao;
   contract: string;
   taglines: string[];
   metodosPagamento: PaymentMethod[];
@@ -170,6 +178,12 @@ export const DEFAULT_CONFIG: SiteConfig = {
       featured: false,
     },
   ],
+  taxaInstalacao: {
+    valor: "1.500",
+    unidade: "MT",
+    nota: "Pagamento único no ato da adesão — cobre deslocação, montagem, configuração, ativação e testes. Pode variar conforme a localização e a complexidade da instalação.",
+    mostrar: true,
+  },
   contract: DEFAULT_CONTRACT,
   taglines: DEFAULT_TAGLINES,
   metodosPagamento: [],
@@ -191,6 +205,7 @@ export function useSiteConfig(): SiteConfig {
             contacts: { ...DEFAULT_CONFIG.contacts, ...(data.contacts || {}) },
             hero: { ...DEFAULT_CONFIG.hero, ...(data.hero || {}) },
             plans: data.plans && data.plans.length ? data.plans : DEFAULT_CONFIG.plans,
+            taxaInstalacao: { ...DEFAULT_CONFIG.taxaInstalacao, ...(data.taxaInstalacao || {}) },
             contract: data.contract || DEFAULT_CONFIG.contract,
             taglines: data.taglines && data.taglines.length ? data.taglines : DEFAULT_CONFIG.taglines,
             metodosPagamento: Array.isArray(data.metodosPagamento) ? data.metodosPagamento : DEFAULT_CONFIG.metodosPagamento,

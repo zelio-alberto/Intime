@@ -210,6 +210,9 @@ export default function Aderir() {
                     <p className="text-muted text-sm mb-6">Verifique e envie. É rápido.</p>
                     <div className="border border-line bg-card p-5 mb-5 space-y-2 text-sm">
                       <div className="flex justify-between gap-4"><span className="text-faint">Pacote</span><span className="text-fg font-medium text-right">{planName}</span></div>
+                      {cfg.taxaInstalacao.mostrar && cfg.taxaInstalacao.valor && (
+                        <div className="flex justify-between gap-4"><span className="text-faint">Taxa de adesão/instalação</span><span className="text-fg text-right">{cfg.taxaInstalacao.valor} {cfg.taxaInstalacao.unidade} <span className="text-faint">(pagamento único)</span></span></div>
+                      )}
                       <div className="flex justify-between gap-4"><span className="text-faint">Nome</span><span className="text-fg text-right">{form.nome}</span></div>
                       <div className="flex justify-between gap-4"><span className="text-faint">WhatsApp</span><span className="text-fg text-right">{form.whatsapp}</span></div>
                       <div className="flex justify-between gap-4"><span className="text-faint">Local</span><span className="text-fg text-right">{form.bairro}, {form.cidade}</span></div>

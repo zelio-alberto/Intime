@@ -1,5 +1,5 @@
 import { useConfig } from "./ConfigContext";
-import { type Plan } from "../useSiteConfig";
+import { type Plan, type TaxaInstalacao } from "../useSiteConfig";
 import { input, label, pageTitle } from "./ui";
 import SaveBar from "./SaveBar";
 import { Plus, Trash2 } from "lucide-react";
@@ -9,6 +9,8 @@ export default function Pacotes() {
 
   const setPlan = (i: number, patch: Partial<Plan>) =>
     setCfg((c) => ({ ...c, plans: c.plans.map((p, idx) => (idx === i ? { ...p, ...patch } : p)) }));
+  const setTaxa = (patch: Partial<TaxaInstalacao>) =>
+    setCfg((c) => ({ ...c, taxaInstalacao: { ...c.taxaInstalacao, ...patch } }));
   const addPlan = () =>
     setCfg((c) => ({ ...c, plans: [...c.plans, { id: "plano-" + (c.plans.length + 1), name: "Novo pacote", tagline: "", idealFor: "", equipment: "", price: "0", unit: "MT / mês", from: true, features: [], featured: false }] }));
   const removePlan = (i: number) =>
@@ -22,6 +24,23 @@ export default function Pacotes() {
           <p className="text-muted text-sm">Planos mostrados no slider do site e na adesão.</p>
         </div>
         <button onClick={addPlan} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors shrink-0"><Plus size={14} /> Pacote</button>
+      </div>
+
+      <div className="border border-line p-5 bg-card mb-8">
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-display text-lg text-fg">Taxa de adesão / instalação</span>
+          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
+            <input type="checkbox" checked={!!cfg.taxaInstalacao.mostrar} onChange={(e) => setTaxa({ mostrar: e.target.checked })} /> Mostrar no site
+          </label>
+        </div>
+        <p className="text-muted text-xs mb-4">Pagamento único cobrado na adesão. Com "Mostrar no site" ativo, o valor aparece nos pacotes e no pedido de instalação; desativado, o site mantém o texto genérico ("apresentada durante o atendimento").</p>
+        <div className="grid md:grid-cols-2 gap-4 mb-4">
+          <div><label className={label}>Valor (ex: 5.000)</label><input className={input} value={cfg.taxaInstalacao.valor} onChange={(e) => setTaxa({ valor: e.target.value })} /></div>
+          <div><label className={label}>Unidade</label><input className={input} value={cfg.taxaInstalacao.unidade} onChange={(e) => setTaxa({ unidade: e.target.value })} /></div>
+        </div>
+        <div><label className={label}>Nota (aparece junto ao valor)</label>
+          <textarea className={input + " min-h-[70px] resize-y"} value={cfg.taxaInstalacao.nota} onChange={(e) => setTaxa({ nota: e.target.value })} />
+        </div>
       </div>
 
       <div className="space-y-6">

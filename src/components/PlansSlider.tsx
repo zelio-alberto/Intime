@@ -2,9 +2,10 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Wifi, Cable, Gauge } from "lucide-react";
-import type { Plan } from "../useSiteConfig";
+import type { Plan, TaxaInstalacao } from "../useSiteConfig";
 
-export default function PlansSlider({ plans }: { plans: Plan[] }) {
+export default function PlansSlider({ plans, taxa }: { plans: Plan[]; taxa?: TaxaInstalacao }) {
+  const mostraTaxa = !!(taxa && taxa.mostrar && taxa.valor);
   const n = plans.length;
   const [[page, dir], setPage] = useState<[number, number]>([0, 0]);
   const idx = ((page % n) + n) % n;
@@ -59,11 +60,18 @@ export default function PlansSlider({ plans }: { plans: Plan[] }) {
               <h3 className="font-display text-4xl text-fg mb-2">{p.name}</h3>
               {p.tagline && <p className="text-muted font-light mb-6">{p.tagline}</p>}
 
-              <div className="flex items-baseline gap-2 mb-7">
-                {p.from && <span className="font-mono text-[11px] text-faint uppercase tracking-wider">A partir de</span>}
-                <span className="font-display text-5xl text-fg tracking-tight">{p.price}</span>
-                <span className="font-mono text-xs text-faint uppercase tracking-widest">{p.unit}</span>
+              <div className={mostraTaxa ? "mb-2" : "mb-7"}>
+                <div className="flex items-baseline gap-2">
+                  {p.from && <span className="font-mono text-[11px] text-faint uppercase tracking-wider">A partir de</span>}
+                  <span className="font-display text-5xl text-fg tracking-tight">{p.price}</span>
+                  <span className="font-mono text-xs text-faint uppercase tracking-widest">{p.unit}</span>
+                </div>
               </div>
+              {mostraTaxa && (
+                <p className="font-mono text-[11px] text-faint mb-7">
+                  + taxa de adesão/instalação de <b className="text-fg font-medium">{taxa!.valor} {taxa!.unidade}</b> (pagamento único)
+                </p>
+              )}
 
               <div className="space-y-3 mb-6 text-[13.5px]">
                 {p.speedDetail && <div className="flex items-start gap-3 text-muted"><Gauge size={16} className="text-accent shrink-0 mt-0.5" /> <span><b className="text-fg font-medium">Velocidade:</b> {p.speedDetail}</span></div>}

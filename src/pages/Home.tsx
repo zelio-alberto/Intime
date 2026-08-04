@@ -168,9 +168,9 @@ export default function Home() {
           </motion.div>
 
           {/* Slider animado de pacotes */}
-          <PlansSlider plans={cfg.plans} />
+          <PlansSlider plans={cfg.plans} taxa={cfg.taxaInstalacao} />
           <p className="font-mono text-[11px] text-faint mt-8 max-w-3xl normal-case leading-relaxed">
-            Os valores podem variar conforme o tipo de equipamento, o número de routers adicionais, o tamanho do espaço, a localização e as condições de instalação. As velocidades indicadas são máximas disponíveis, não garantidas. A adesão está sujeita a avaliação técnica, taxa de inscrição/instalação e assinatura de termo de compromisso.
+            Os valores podem variar conforme o tipo de equipamento, o número de routers adicionais, o tamanho do espaço, a localização e as condições de instalação. As velocidades indicadas são máximas disponíveis, não garantidas. A adesão está sujeita a avaliação técnica, taxa de adesão/instalação{cfg.taxaInstalacao.mostrar && cfg.taxaInstalacao.valor ? ` de ${cfg.taxaInstalacao.valor} ${cfg.taxaInstalacao.unidade} (pagamento único)` : ""} e assinatura de termo de compromisso.{cfg.taxaInstalacao.mostrar && cfg.taxaInstalacao.valor && cfg.taxaInstalacao.nota ? ` ${cfg.taxaInstalacao.nota}` : ""}
           </p>
         </div>
       </section>
