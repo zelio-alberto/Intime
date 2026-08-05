@@ -23,7 +23,7 @@ export default function Aderir() {
   const hasPre = !!cfg.plans.find((p) => p.id === preplan);
 
   const [[step, dir], setStep] = useState<[number, number]>([hasPre ? 1 : 0, 1]);
-  const [form, setForm] = useState({ nome: "", whatsapp: "", cidade: "", bairro: "", tipo: "Casa", horario: "Qualquer hora", gps: "" });
+  const [form, setForm] = useState({ nome: "", whatsapp: "", email: "", cidade: "", bairro: "", tipo: "Casa", horario: "Qualquer hora", gps: "" });
   const [planId, setPlanId] = useState(preplan || cfg.plans.find((p) => p.featured)?.id || cfg.plans[0]?.id || "");
   const [aceite, setAceite] = useState(false);
   const [sending, setSending] = useState(false);
@@ -31,11 +31,16 @@ export default function Aderir() {
   const [user, setUser] = useState<{ email: string; uid: string; name: string } | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
 
-  // Sessão Google: cria/identifica a conta e liga o pedido à pessoa (capta o email).
+  // Sessão Google: cria/identifica a conta e liga o pedido à pessoa.
+  // Sugere nome e email nos campos (a pessoa pode alterar o email de contacto).
   useEffect(() => onAuthStateChanged(auth, (u) => {
     if (u?.email) {
       setUser({ email: u.email, uid: u.uid, name: u.displayName || "" });
-      setForm((f) => (f.nome.trim() ? f : { ...f, nome: u.displayName || f.nome }));
+      setForm((f) => ({
+        ...f,
+        nome: f.nome.trim() ? f.nome : (u.displayName || f.nome),
+        email: f.email.trim() ? f.email : (u.email || ""),
+      }));
     } else setUser(null);
   }), []);
 
@@ -67,9 +72,14 @@ export default function Aderir() {
     setSending(true);
     try {
       const promotor = getRef();
+      // `email` é sempre o da conta Google (elo com /conta e regras);
+      // se a pessoa indicou outro para contacto, vai em `emailContacto`.
+      const contacto = form.email.trim().toLowerCase();
+      const { email: _e, ...resto } = form;
       await addDoc(collection(db, "inscricoes"), {
-        ...form, plano: planName, planoId: planId, status: "novo",
+        ...resto, plano: planName, planoId: planId, status: "novo",
         email: user.email.toLowerCase(), uid: user.uid,
+        ...(contacto && contacto !== user.email.toLowerCase() ? { emailContacto: contacto } : {}),
         ...(promotor ? { promotor } : {}),
         createdAt: serverTimestamp(),
       });
@@ -161,10 +171,19 @@ export default function Aderir() {
                 {key === "identificacao" && (
                   <div>
                     <h2 className="font-display text-2xl text-fg mb-1">Como o contactamos?</h2>
-                    <p className="text-muted text-sm mb-6">Só precisamos do seu nome e WhatsApp.</p>
+                    <p className="text-muted text-sm mb-6">Nome, WhatsApp e email de contacto.</p>
                     <div className="space-y-5">
                       <div><label className={lbl}>Nome completo *</label><input autoFocus required className={field} value={form.nome} onChange={(e) => set("nome", e.target.value)} /></div>
                       <div><label className={lbl}>Número de WhatsApp *</label><input required className={field} value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="+258 8x xxx xxxx" /></div>
+                      <div>
+                        <label className={lbl}>Email de contacto</label>
+                        <input type="email" className={field} value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="oseu@email.com" />
+                        {user && form.email.trim().toLowerCase() === user.email.toLowerCase() ? (
+                          <p className="text-faint text-xs mt-2">Sugerido da sua conta Google — confirme ou escreva outro, se preferir.</p>
+                        ) : user && form.email.trim() ? (
+                          <p className="text-faint text-xs mt-2">Vamos contactá-lo por este email; a conta continua ligada a <b className="text-muted">{user.email}</b>.</p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -215,6 +234,9 @@ export default function Aderir() {
                       )}
                       <div className="flex justify-between gap-4"><span className="text-faint">Nome</span><span className="text-fg text-right">{form.nome}</span></div>
                       <div className="flex justify-between gap-4"><span className="text-faint">WhatsApp</span><span className="text-fg text-right">{form.whatsapp}</span></div>
+                      {form.email.trim() && (
+                        <div className="flex justify-between gap-4"><span className="text-faint">Email de contacto</span><span className="text-fg text-right">{form.email.trim()}</span></div>
+                      )}
                       <div className="flex justify-between gap-4"><span className="text-faint">Local</span><span className="text-fg text-right">{form.bairro}, {form.cidade}</span></div>
                       <div className="flex justify-between gap-4"><span className="text-faint">Espaço · Horário</span><span className="text-fg text-right">{form.tipo} · {form.horario}</span></div>
                     </div>
@@ -223,7 +245,12 @@ export default function Aderir() {
                     {user ? (
                       <div className="flex items-start gap-3 border border-line bg-card p-4 mb-5 text-sm">
                         <Check size={16} className="text-accent shrink-0 mt-0.5" />
-                        <span className="text-muted">Pedido ligado à conta <b className="text-fg">{user.email}</b>. Vai poder acompanhar o estado em <b className="text-fg">“Entrar”</b>.</span>
+                        <span className="text-muted">
+                          Pedido ligado à conta <b className="text-fg">{user.email}</b>. Vai poder acompanhar o estado em <b className="text-fg">“Entrar”</b>.
+                          {form.email.trim() && form.email.trim().toLowerCase() !== user.email.toLowerCase() && (
+                            <> Contacto por email: <b className="text-fg">{form.email.trim()}</b>.</>
+                          )}
+                        </span>
                       </div>
                     ) : (
                       <div className="border border-line bg-card p-5 mb-5">

@@ -68,7 +68,7 @@ export default function NovoCadastro() {
         if (!s.exists()) return;
         const d = { id: s.id, ...s.data() } as DocumentData;
         setLead(d);
-        setF((o) => ({ ...o, nome: d.nome || o.nome, whatsapp: d.whatsapp || o.whatsapp, bairro: d.bairro || o.bairro, cidade: d.cidade || o.cidade, gps: d.gps || o.gps }));
+        setF((o) => ({ ...o, nome: d.nome || o.nome, whatsapp: d.whatsapp || o.whatsapp, email: d.email || d.emailContacto || o.email, bairro: d.bairro || o.bairro, cidade: d.cidade || o.cidade, gps: d.gps || o.gps }));
         if (d.plano) setPacoteNome(String(d.plano));
       } catch { /* */ }
     })();

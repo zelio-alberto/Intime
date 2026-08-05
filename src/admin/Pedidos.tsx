@@ -5,7 +5,7 @@ import { db } from "../firebase";
 import { pageTitle } from "./ui";
 import { MessageCircle, Trash2, MapPin, UserPlus } from "lucide-react";
 
-type Req = { id: string; nome?: string; whatsapp?: string; plano?: string; cidade?: string; bairro?: string; tipo?: string; horario?: string; gps?: string; status?: string; createdAt?: any };
+type Req = { id: string; nome?: string; whatsapp?: string; email?: string; emailContacto?: string; plano?: string; cidade?: string; bairro?: string; tipo?: string; horario?: string; gps?: string; status?: string; createdAt?: any };
 
 const STATUS = ["novo", "contactado", "concluido"];
 const LABEL: Record<string, string> = { novo: "Novo", contactado: "Contactado", concluido: "Concluído" };
@@ -69,6 +69,13 @@ export default function Pedidos() {
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3 text-sm mb-4">
                 <div><span className="block text-[10px] font-mono uppercase text-faint">Pacote</span><span className="text-fg">{r.plano || "—"}</span></div>
                 <div><span className="block text-[10px] font-mono uppercase text-faint">WhatsApp</span><span className="text-fg">{r.whatsapp || "—"}</span></div>
+                <div>
+                  <span className="block text-[10px] font-mono uppercase text-faint">Email</span>
+                  <span className="text-fg break-all">{r.emailContacto || r.email || "—"}</span>
+                  {r.emailContacto && r.email && r.emailContacto !== r.email && (
+                    <span className="block text-[11px] text-faint break-all">conta: {r.email}</span>
+                  )}
+                </div>
                 <div><span className="block text-[10px] font-mono uppercase text-faint">Local</span><span className="text-fg">{[r.bairro, r.cidade].filter(Boolean).join(", ") || "—"}</span></div>
                 <div><span className="block text-[10px] font-mono uppercase text-faint">Espaço · Horário</span><span className="text-fg">{r.tipo || "—"} · {r.horario || "—"}</span></div>
               </div>
