@@ -5,7 +5,7 @@ import { db } from "../firebase";
 import { pageTitle } from "./ui";
 import { MessageCircle, Trash2, MapPin, UserPlus } from "lucide-react";
 
-type Req = { id: string; nome?: string; whatsapp?: string; email?: string; emailContacto?: string; plano?: string; cidade?: string; bairro?: string; tipo?: string; horario?: string; gps?: string; status?: string; createdAt?: any };
+type Req = { id: string; nome?: string; whatsapp?: string; email?: string; emailContacto?: string; criadoPorEmail?: string; plano?: string; cidade?: string; bairro?: string; tipo?: string; horario?: string; gps?: string; status?: string; createdAt?: any };
 
 const STATUS = ["novo", "contactado", "concluido"];
 const LABEL: Record<string, string> = { novo: "Novo", contactado: "Contactado", concluido: "Concluído" };
@@ -72,8 +72,8 @@ export default function Pedidos() {
                 <div>
                   <span className="block text-[10px] font-mono uppercase text-faint">Email</span>
                   <span className="text-fg break-all">{r.emailContacto || r.email || "—"}</span>
-                  {r.emailContacto && r.email && r.emailContacto !== r.email && (
-                    <span className="block text-[11px] text-faint break-all">conta: {r.email}</span>
+                  {r.criadoPorEmail && r.criadoPorEmail !== r.email && (
+                    <span className="block text-[11px] text-faint break-all">criado por: {r.criadoPorEmail}</span>
                   )}
                 </div>
                 <div><span className="block text-[10px] font-mono uppercase text-faint">Local</span><span className="text-fg">{[r.bairro, r.cidade].filter(Boolean).join(", ") || "—"}</span></div>

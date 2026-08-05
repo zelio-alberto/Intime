@@ -72,14 +72,15 @@ export default function Aderir() {
     setSending(true);
     try {
       const promotor = getRef();
-      // `email` é sempre o da conta Google (elo com /conta e regras);
-      // se a pessoa indicou outro para contacto, vai em `emailContacto`.
-      const contacto = form.email.trim().toLowerCase();
+      // O pedido fica ligado ao email indicado no formulário (é com ele que o
+      // dono acompanha o estado em /conta); sem email digitado, usa o da sessão.
+      // Quem preencheu com outra sessão Google fica registado em criadoPorEmail.
+      const emailPedido = form.email.trim().toLowerCase() || user.email.toLowerCase();
       const { email: _e, ...resto } = form;
       await addDoc(collection(db, "inscricoes"), {
         ...resto, plano: planName, planoId: planId, status: "novo",
-        email: user.email.toLowerCase(), uid: user.uid,
-        ...(contacto && contacto !== user.email.toLowerCase() ? { emailContacto: contacto } : {}),
+        email: emailPedido, uid: user.uid,
+        ...(emailPedido !== user.email.toLowerCase() ? { criadoPorEmail: user.email.toLowerCase() } : {}),
         ...(promotor ? { promotor } : {}),
         createdAt: serverTimestamp(),
       });
@@ -181,7 +182,7 @@ export default function Aderir() {
                         {user && form.email.trim().toLowerCase() === user.email.toLowerCase() ? (
                           <p className="text-faint text-xs mt-2">Sugerido da sua conta Google — confirme ou escreva outro, se preferir.</p>
                         ) : user && form.email.trim() ? (
-                          <p className="text-faint text-xs mt-2">Vamos contactá-lo por este email; a conta continua ligada a <b className="text-muted">{user.email}</b>.</p>
+                          <p className="text-faint text-xs mt-2">O pedido fica ligado a este email — é com ele que se acompanha o estado em “Entrar”.</p>
                         ) : null}
                       </div>
                     </div>
@@ -246,9 +247,10 @@ export default function Aderir() {
                       <div className="flex items-start gap-3 border border-line bg-card p-4 mb-5 text-sm">
                         <Check size={16} className="text-accent shrink-0 mt-0.5" />
                         <span className="text-muted">
-                          Pedido ligado à conta <b className="text-fg">{user.email}</b>. Vai poder acompanhar o estado em <b className="text-fg">“Entrar”</b>.
-                          {form.email.trim() && form.email.trim().toLowerCase() !== user.email.toLowerCase() && (
-                            <> Contacto por email: <b className="text-fg">{form.email.trim()}</b>.</>
+                          {form.email.trim() && form.email.trim().toLowerCase() !== user.email.toLowerCase() ? (
+                            <>Pedido ligado a <b className="text-fg">{form.email.trim().toLowerCase()}</b> — o estado acompanha-se em <b className="text-fg">“Entrar”</b> com esse email.</>
+                          ) : (
+                            <>Pedido ligado à conta <b className="text-fg">{user.email}</b>. Vai poder acompanhar o estado em <b className="text-fg">“Entrar”</b>.</>
                           )}
                         </span>
                       </div>
