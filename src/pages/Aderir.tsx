@@ -1,9 +1,9 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
-import { db, auth, entrarComGoogle, mensagemErroAuth, dentroDeAppBrowser } from "../firebase";
+import { db, auth, entrarComGoogle, mensagemErroAuth, dentroDeAppBrowser, MASTER_ADMIN } from "../firebase";
 import Layout from "../components/Layout";
 import LocationFields from "../components/LocationFields";
 import { useSiteConfig } from "../useSiteConfig";
@@ -29,21 +29,28 @@ export default function Aderir() {
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
   const [user, setUser] = useState<{ email: string; uid: string; name: string; foto: string } | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authPronto, setAuthPronto] = useState(false);
   const [introDispensado, setIntroDispensado] = useState(false);
 
   // Sessão Google: cria/identifica a conta e liga o pedido à pessoa.
-  // Sugere nome e email nos campos (a pessoa pode alterar o email de contacto).
-  useEffect(() => onAuthStateChanged(auth, (u) => {
+  // O email do pedido é SEMPRE o da conta (não editável); só um admin pode
+  // indicar outro email — é assim que se pede em nome de terceiros.
+  useEffect(() => onAuthStateChanged(auth, async (u) => {
     if (u?.email) {
       setUser({ email: u.email, uid: u.uid, name: u.displayName || "", foto: u.photoURL || "" });
       setForm((f) => ({
         ...f,
         nome: f.nome.trim() ? f.nome : (u.displayName || f.nome),
-        email: f.email.trim() ? f.email : (u.email || ""),
+        email: u.email || "",
       }));
-    } else setUser(null);
+      if (u.email === MASTER_ADMIN) setIsAdmin(true);
+      else {
+        try { setIsAdmin((await getDoc(doc(db, "starlinkAdmins", u.email))).exists()); }
+        catch { setIsAdmin(false); }
+      }
+    } else { setUser(null); setIsAdmin(false); }
     setAuthPronto(true);
   }), []);
 
@@ -63,7 +70,7 @@ export default function Aderir() {
   // e pré-preenche; tudo continua editável) e repete no Confirmar se ainda faltar.
   const caixaGoogle = user ? null : (
     <div className="border border-line bg-card p-5 mb-6">
-      <p className="text-sm text-muted mb-4">Entre com Google e preenchemos os seus dados por si — pode alterá-los a seguir. A conta serve para acompanhar o estado do pedido.</p>
+      <p className="text-sm text-muted mb-4">Entre com Google e preenchemos os seus dados por si. O pedido fica ligado ao email da conta — é com ele que acompanha o estado; os restantes dados pode alterá-los a seguir.</p>
       {dentroDeAppBrowser() && (
         <p className="text-sm text-accent mb-4">Está a ver o site dentro do WhatsApp e o Google não permite login aqui. Toque nos três pontos (⋮) no canto e escolha <b>“Abrir no navegador”</b> (Chrome), depois continue.</p>
       )}
@@ -98,10 +105,10 @@ export default function Aderir() {
     setSending(true);
     try {
       const promotor = getRef();
-      // O pedido fica ligado ao email indicado no formulário (é com ele que o
-      // dono acompanha o estado em /conta); sem email digitado, usa o da sessão.
-      // Quem preencheu com outra sessão Google fica registado em criadoPorEmail.
-      const emailPedido = form.email.trim().toLowerCase() || user.email.toLowerCase();
+      // O pedido fica SEMPRE ligado ao email da conta Google (elo com /conta).
+      // Só um admin pode indicar outro email — pedido em nome de terceiros —
+      // e nesse caso fica registado em criadoPorEmail quem o criou.
+      const emailPedido = (isAdmin && form.email.trim()) ? form.email.trim().toLowerCase() : user.email.toLowerCase();
       const { email: _e, ...resto } = form;
       await addDoc(collection(db, "inscricoes"), {
         ...resto, plano: planName, planoId: planId, status: "novo",
@@ -156,7 +163,7 @@ export default function Aderir() {
               <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
                 className="font-display text-3xl text-fg mb-3">Vamos preparar o seu pedido.</motion.h2>
               <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-                className="text-muted text-sm leading-relaxed mb-6">Ligue a sua conta Google e criamos o seu pré-registo num toque — nome e email preenchidos por si. Pode alterar tudo antes de enviar.</motion.p>
+                className="text-muted text-sm leading-relaxed mb-6">Ligue a sua conta Google e criamos o seu pré-registo num toque — o pedido fica ligado ao email da conta, e os restantes dados pode ajustá-los antes de enviar.</motion.p>
               {dentroDeAppBrowser() && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="text-sm text-accent mb-5">
                   Está a ver o site dentro do WhatsApp e o Google não permite login aqui. Toque nos três pontos (⋮) e escolha <b>“Abrir no navegador”</b>, depois continue.
@@ -234,7 +241,7 @@ export default function Aderir() {
                 {key === "identificacao" && (
                   <div>
                     <h2 className="font-display text-2xl text-fg mb-1">Como o contactamos?</h2>
-                    <p className="text-muted text-sm mb-6">Nome, WhatsApp e email de contacto.</p>
+                    <p className="text-muted text-sm mb-6">Nome e WhatsApp — o email vem da sua conta Google.</p>
                     {!user && !introDispensado && caixaGoogle}
                     {!user && introDispensado && (
                       <p className="text-faint text-xs mb-6">
@@ -251,7 +258,7 @@ export default function Aderir() {
                         ) : (
                           <Check size={16} className="text-accent shrink-0" />
                         )}
-                        <span className="text-xs text-muted leading-relaxed">Pré-registo criado com a conta <b className="text-fg">{user.email}</b>. Confirme ou altere o que quiser abaixo.</span>
+                        <span className="text-xs text-muted leading-relaxed">Pré-registo criado com a conta <b className="text-fg">{user.email}</b> — o pedido fica ligado a este email. Confirme ou ajuste os restantes dados abaixo.</span>
                       </motion.div>
                     )}
                     <div className="space-y-5">
@@ -259,12 +266,19 @@ export default function Aderir() {
                       <div><label className={lbl}>Número de WhatsApp *</label><input required className={field} value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="+258 8x xxx xxxx" /></div>
                       <div>
                         <label className={lbl}>Email de contacto</label>
-                        <input type="email" className={field} value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="oseu@email.com" />
-                        {user && form.email.trim().toLowerCase() === user.email.toLowerCase() ? (
-                          <p className="text-faint text-xs mt-2">Sugerido da sua conta Google — confirme ou escreva outro, se preferir.</p>
-                        ) : user && form.email.trim() ? (
-                          <p className="text-faint text-xs mt-2">O pedido fica ligado a este email — é com ele que se acompanha o estado em “Entrar”.</p>
-                        ) : null}
+                        {isAdmin ? (
+                          <>
+                            <input type="email" className={field} value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="email do cliente" />
+                            <p className="text-faint text-xs mt-2">Modo admin — pode indicar o email do cliente; o pedido fica ligado a esse email.</p>
+                          </>
+                        ) : user ? (
+                          <>
+                            <input type="email" className={clsx(field, "opacity-60 cursor-not-allowed")} value={user.email} disabled readOnly />
+                            <p className="text-faint text-xs mt-2">Email da sua conta Google — é com ele que acompanha o pedido em “Entrar”.</p>
+                          </>
+                        ) : (
+                          <p className="text-faint text-sm border border-line bg-card px-4 py-4">Será o da conta Google com que entrar.</p>
+                        )}
                       </div>
                     </div>
                   </div>
