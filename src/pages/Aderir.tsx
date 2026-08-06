@@ -28,21 +28,28 @@ export default function Aderir() {
   const [aceite, setAceite] = useState(false);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(false);
-  const [user, setUser] = useState<{ email: string; uid: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ email: string; uid: string; name: string; foto: string } | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  const [authPronto, setAuthPronto] = useState(false);
+  const [introDispensado, setIntroDispensado] = useState(false);
 
   // Sessão Google: cria/identifica a conta e liga o pedido à pessoa.
   // Sugere nome e email nos campos (a pessoa pode alterar o email de contacto).
   useEffect(() => onAuthStateChanged(auth, (u) => {
     if (u?.email) {
-      setUser({ email: u.email, uid: u.uid, name: u.displayName || "" });
+      setUser({ email: u.email, uid: u.uid, name: u.displayName || "", foto: u.photoURL || "" });
       setForm((f) => ({
         ...f,
         nome: f.nome.trim() ? f.nome : (u.displayName || f.nome),
         email: f.email.trim() ? f.email : (u.email || ""),
       }));
     } else setUser(null);
+    setAuthPronto(true);
   }), []);
+
+  // Convite de boas-vindas: mal se entra em "Pedir instalação", propomos ligar
+  // a conta Google para criar o pré-registo (dispensável — dá para preencher à mão).
+  const mostrarIntro = authPronto && !user && !introDispensado && !done;
 
   const [authErro, setAuthErro] = useState("");
   const entrarGoogle = async () => {
@@ -135,6 +142,42 @@ export default function Aderir() {
 
   return (
     <Layout>
+      {/* Convite inicial: liga a conta Google e o pré-registo preenche-se sozinho */}
+      <AnimatePresence>
+        {mostrarIntro && (
+          <motion.div key="intro" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-6 bg-bg/85 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, y: 30, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }}
+              transition={{ duration: 0.45, ease: "easeOut" }}
+              className="w-full max-w-md border border-line bg-card p-8 relative overflow-hidden">
+              <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
+              <motion.span initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+                className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-4 block">Adesão Intime</motion.span>
+              <motion.h2 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+                className="font-display text-3xl text-fg mb-3">Vamos preparar o seu pedido.</motion.h2>
+              <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
+                className="text-muted text-sm leading-relaxed mb-6">Ligue a sua conta Google e criamos o seu pré-registo num toque — nome e email preenchidos por si. Pode alterar tudo antes de enviar.</motion.p>
+              {dentroDeAppBrowser() && (
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="text-sm text-accent mb-5">
+                  Está a ver o site dentro do WhatsApp e o Google não permite login aqui. Toque nos três pontos (⋮) e escolha <b>“Abrir no navegador”</b>, depois continue.
+                </motion.p>
+              )}
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="space-y-2">
+                <button type="button" onClick={entrarGoogle} disabled={authBusy}
+                  className="w-full inline-flex items-center justify-center gap-2 px-6 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
+                  <UserIcon size={15} /> {authBusy ? "A entrar…" : "Continuar com Google"}
+                </button>
+                <button type="button" onClick={() => setIntroDispensado(true)}
+                  className="w-full text-center font-mono text-[10px] uppercase tracking-widest text-faint hover:text-fg transition-colors py-2.5">
+                  Prefiro preencher manualmente
+                </button>
+              </motion.div>
+              {authErro && <p className="text-sm text-accent mt-4">{authErro}</p>}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <section className="pt-40 pb-12 border-b border-line bg-card">
         <div className="max-w-[760px] mx-auto px-6">
           <span className="font-mono text-accent text-[10px] uppercase tracking-[0.2em] mb-4 block">Adesão</span>
@@ -194,7 +237,15 @@ export default function Aderir() {
                     <p className="text-muted text-sm mb-6">Nome, WhatsApp e email de contacto.</p>
                     {caixaGoogle}
                     {user && (
-                      <p className="text-faint text-xs mb-5 flex items-center gap-2"><Check size={13} className="text-accent" /> Dados sugeridos da conta <b className="text-muted">{user.email}</b> — pode alterá-los.</p>
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+                        className="flex items-center gap-3 border border-accent/30 bg-accent/[0.05] px-4 py-3 mb-6">
+                        {user.foto ? (
+                          <img src={user.foto} alt="" referrerPolicy="no-referrer" className="w-9 h-9 rounded-full border border-line shrink-0" />
+                        ) : (
+                          <Check size={16} className="text-accent shrink-0" />
+                        )}
+                        <span className="text-xs text-muted leading-relaxed">Pré-registo criado com a conta <b className="text-fg">{user.email}</b>. Confirme ou altere o que quiser abaixo.</span>
+                      </motion.div>
                     )}
                     <div className="space-y-5">
                       <div><label className={lbl}>Nome completo *</label><input autoFocus required className={field} value={form.nome} onChange={(e) => set("nome", e.target.value)} /></div>
