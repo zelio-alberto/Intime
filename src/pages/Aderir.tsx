@@ -52,6 +52,22 @@ export default function Aderir() {
     finally { setAuthBusy(false); }
   };
 
+  // Caixa de login Google — aparece no início da identificação (capta nome+email
+  // e pré-preenche; tudo continua editável) e repete no Confirmar se ainda faltar.
+  const caixaGoogle = user ? null : (
+    <div className="border border-line bg-card p-5 mb-6">
+      <p className="text-sm text-muted mb-4">Entre com Google e preenchemos os seus dados por si — pode alterá-los a seguir. A conta serve para acompanhar o estado do pedido.</p>
+      {dentroDeAppBrowser() && (
+        <p className="text-sm text-accent mb-4">Está a ver o site dentro do WhatsApp e o Google não permite login aqui. Toque nos três pontos (⋮) no canto e escolha <b>“Abrir no navegador”</b> (Chrome), depois continue.</p>
+      )}
+      <button type="button" onClick={entrarGoogle} disabled={authBusy}
+        className="inline-flex items-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
+        <UserIcon size={15} /> {authBusy ? "A entrar…" : "Entrar com Google"}
+      </button>
+      {authErro && <p className="text-sm text-accent mt-3">{authErro}</p>}
+    </div>
+  );
+
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const plan = cfg.plans.find((p) => p.id === planId);
   const planName = plan?.name || "";
@@ -176,6 +192,10 @@ export default function Aderir() {
                   <div>
                     <h2 className="font-display text-2xl text-fg mb-1">Como o contactamos?</h2>
                     <p className="text-muted text-sm mb-6">Nome, WhatsApp e email de contacto.</p>
+                    {caixaGoogle}
+                    {user && (
+                      <p className="text-faint text-xs mb-5 flex items-center gap-2"><Check size={13} className="text-accent" /> Dados sugeridos da conta <b className="text-muted">{user.email}</b> — pode alterá-los.</p>
+                    )}
                     <div className="space-y-5">
                       <div><label className={lbl}>Nome completo *</label><input autoFocus required className={field} value={form.nome} onChange={(e) => set("nome", e.target.value)} /></div>
                       <div><label className={lbl}>Número de WhatsApp *</label><input required className={field} value={form.whatsapp} onChange={(e) => set("whatsapp", e.target.value)} placeholder="+258 8x xxx xxxx" /></div>
@@ -258,17 +278,7 @@ export default function Aderir() {
                         </span>
                       </div>
                     ) : (
-                      <div className="border border-line bg-card p-5 mb-5">
-                        <p className="text-sm text-muted mb-4">Entre com Google para criar a sua conta e acompanhar o estado do pedido. Usamos o seu email só para isto.</p>
-                        {dentroDeAppBrowser() && (
-                          <p className="text-sm text-accent mb-4">Está a ver o site dentro do WhatsApp e o Google não permite login aqui. Toque nos três pontos (⋮) no canto e escolha <b>“Abrir no navegador”</b> (Chrome), depois continue.</p>
-                        )}
-                        <button type="button" onClick={entrarGoogle} disabled={authBusy}
-                          className="inline-flex items-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
-                          <UserIcon size={15} /> {authBusy ? "A entrar…" : "Entrar com Google"}
-                        </button>
-                        {authErro && <p className="text-sm text-accent mt-3">{authErro}</p>}
-                      </div>
+                      caixaGoogle
                     )}
 
                     <label className="flex items-start gap-3 text-sm text-muted cursor-pointer mb-2">
