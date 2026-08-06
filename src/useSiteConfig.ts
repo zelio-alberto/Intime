@@ -91,7 +91,7 @@ Este documento é um resumo das condições. As condições completas e vinculat
 // Valores por omissão — o site mostra isto enquanto nada estiver guardado no Firestore.
 export const DEFAULT_CONFIG: SiteConfig = {
   contacts: {
-    email: "comercial@intime.co.mz",
+    email: "intime@intime.co.mz",
     whatsapp: "258840000000",
     phone: "+258 84 000 0000",
   },
