@@ -235,7 +235,14 @@ export default function Aderir() {
                   <div>
                     <h2 className="font-display text-2xl text-fg mb-1">Como o contactamos?</h2>
                     <p className="text-muted text-sm mb-6">Nome, WhatsApp e email de contacto.</p>
-                    {caixaGoogle}
+                    {!user && !introDispensado && caixaGoogle}
+                    {!user && introDispensado && (
+                      <p className="text-faint text-xs mb-6">
+                        Preenchimento manual. Se mudar de ideias,{" "}
+                        <button type="button" onClick={entrarGoogle} className="text-accent hover:underline">entre com Google</button>
+                        {" "}e preenchemos por si — a conta será pedida no fim, para acompanhar o pedido.
+                      </p>
+                    )}
                     {user && (
                       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
                         className="flex items-center gap-3 border border-accent/30 bg-accent/[0.05] px-4 py-3 mb-6">
