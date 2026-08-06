@@ -1,9 +1,9 @@
 import { useState, useEffect, type FormEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import Layout from "../components/Layout";
-import { db, auth, googleProvider } from "../firebase";
+import { db, auth, entrarComGoogle, mensagemErroAuth } from "../firebase";
 import { doc, getDoc, writeBatch, serverTimestamp } from "firebase/firestore";
-import { signInWithPopup, onAuthStateChanged, type User } from "firebase/auth";
+import { onAuthStateChanged, type User } from "firebase/auth";
 import { CheckCircle2, Copy, Check, User as UserIcon, ShieldAlert } from "lucide-react";
 
 const field = "w-full bg-bg border border-line px-4 py-3.5 text-sm text-fg outline-none focus:border-accent transition-colors";
@@ -65,8 +65,8 @@ export default function SejaPromotor() {
 
   const entrarGoogle = async () => {
     setBusy(true); setErro("");
-    try { await signInWithPopup(auth, googleProvider); }
-    catch { setErro("Login Google indisponível. Tente de novo."); }
+    try { await entrarComGoogle(); }
+    catch (e) { setErro(mensagemErroAuth(e)); }
     finally { setBusy(false); }
   };
 

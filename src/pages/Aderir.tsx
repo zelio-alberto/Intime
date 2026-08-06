@@ -2,8 +2,8 @@ import { useState, useEffect, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
-import { db, auth, googleProvider } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { db, auth, entrarComGoogle, mensagemErroAuth, dentroDeAppBrowser } from "../firebase";
 import Layout from "../components/Layout";
 import LocationFields from "../components/LocationFields";
 import { useSiteConfig } from "../useSiteConfig";
@@ -44,9 +44,11 @@ export default function Aderir() {
     } else setUser(null);
   }), []);
 
+  const [authErro, setAuthErro] = useState("");
   const entrarGoogle = async () => {
     setAuthBusy(true);
-    try { await signInWithPopup(auth, googleProvider); } catch { /* cancelado */ }
+    setAuthErro("");
+    try { await entrarComGoogle(); } catch (e) { setAuthErro(mensagemErroAuth(e)); }
     finally { setAuthBusy(false); }
   };
 
@@ -257,10 +259,14 @@ export default function Aderir() {
                     ) : (
                       <div className="border border-line bg-card p-5 mb-5">
                         <p className="text-sm text-muted mb-4">Entre com Google para criar a sua conta e acompanhar o estado do pedido. Usamos o seu email só para isto.</p>
+                        {dentroDeAppBrowser() && (
+                          <p className="text-sm text-accent mb-4">Está a ver o site dentro do WhatsApp e o Google não permite login aqui. Toque nos três pontos (⋮) no canto e escolha <b>“Abrir no navegador”</b> (Chrome), depois continue.</p>
+                        )}
                         <button type="button" onClick={entrarGoogle} disabled={authBusy}
                           className="inline-flex items-center gap-2 px-6 py-3.5 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
                           <UserIcon size={15} /> {authBusy ? "A entrar…" : "Entrar com Google"}
                         </button>
+                        {authErro && <p className="text-sm text-accent mt-3">{authErro}</p>}
                       </div>
                     )}
 

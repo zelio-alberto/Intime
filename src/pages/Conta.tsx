@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence, useMotionValue, animate, useReducedMotion } from "motion/react";
 import Layout from "../components/Layout";
-import { db, auth, googleProvider } from "../firebase";
+import { db, auth, entrarComGoogle, mensagemErroAuth } from "../firebase";
 import {
   doc, getDoc, getDocs, setDoc, addDoc, collection, onSnapshot,
   query, where, orderBy, limit, serverTimestamp, Timestamp,
   type DocumentData,
 } from "firebase/firestore";
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { signOut, onAuthStateChanged } from "firebase/auth";
 import { useSiteConfig } from "../useSiteConfig";
 import {
   LogOut, Upload, Check, Clock, X as XIcon, RefreshCcw, Ban, Copy, Link2,
@@ -281,7 +281,9 @@ export default function Conta() {
     return () => { active = false; };
   }, [gEmail, contaExiste]);
 
-  const entrarGoogle = async () => { await signInWithPopup(auth, googleProvider); };
+  const entrarGoogle = async () => {
+    try { await entrarComGoogle(); } catch (e) { alert(mensagemErroAuth(e)); }
+  };
   const sair = () => {
     setConta(null); setDados({}); setContaExiste(false);
     setHist([]); setPromo(null); setCodigo(null); setLead(null); setSecao("");

@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAnalytics, isSupported, type Analytics } from "firebase/analytics";
@@ -21,6 +21,37 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
+
+// Browsers embutidos (WhatsApp/Facebook/Instagram) — o Google bloqueia OAuth
+// nestes; a única solução é o utilizador abrir no browser verdadeiro.
+export function dentroDeAppBrowser(): boolean {
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|WhatsApp|Line\/|; wv\)/i.test(ua);
+}
+
+// Login Google resiliente: popup no desktop; se o popup for bloqueado
+// (telemóveis), cai para redirect — o onAuthStateChanged apanha no regresso.
+// Cancelamentos não lançam; erros reais lançam com e.code para a UI traduzir.
+export async function entrarComGoogle(): Promise<void> {
+  try {
+    await signInWithPopup(auth, googleProvider);
+  } catch (e: any) {
+    const code = String(e?.code || "");
+    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request" || code === "auth/user-cancelled") return;
+    if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+      await signInWithRedirect(auth, googleProvider);
+      return;
+    }
+    throw e;
+  }
+}
+
+export function mensagemErroAuth(e: any): string {
+  const code = String(e?.code || "");
+  if (code === "auth/unauthorized-domain") return "Este endereço ainda não está autorizado para login. Tente em https://intime.co.mz ou contacte-nos pelo WhatsApp.";
+  if (code === "auth/network-request-failed") return "Sem ligação. Verifique a internet e tente de novo.";
+  return "Não foi possível entrar com Google. Tente de novo ou abra o site no Chrome.";
+}
 
 export const db = getFirestore(app);
 

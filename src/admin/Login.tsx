@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { signInWithPopup, signOut } from "firebase/auth";
-import { auth, googleProvider } from "../firebase";
+import { signOut } from "firebase/auth";
+import { auth, entrarComGoogle, mensagemErroAuth } from "../firebase";
 import { useAdminAuth } from "./useAdminAuth";
 import { LogIn, ShieldAlert } from "lucide-react";
 
@@ -15,9 +15,9 @@ export default function Login() {
 
   const signIn = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch {
-      alert("Não foi possível iniciar sessão. Tente novamente.");
+      await entrarComGoogle();
+    } catch (e) {
+      alert(mensagemErroAuth(e));
     }
   };
 
