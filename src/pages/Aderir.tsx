@@ -70,7 +70,8 @@ export default function Aderir() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!aceite || !user) return;
+    if (!user) { setAuthErro("Falta só entrar com Google (botão acima) para enviar o pedido."); return; }
+    if (!aceite) return;
     setSending(true);
     try {
       const promotor = getRef();
@@ -294,7 +295,7 @@ export default function Aderir() {
                 Continuar <ArrowRight size={16} />
               </button>
             ) : (
-              <button type="submit" disabled={!aceite || !user || sending}
+              <button type="submit" disabled={!aceite || sending}
                 className="inline-flex items-center gap-2 px-8 py-4 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                 {sending ? "A enviar..." : "Enviar pedido"}
               </button>
