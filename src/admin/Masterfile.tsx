@@ -273,11 +273,11 @@ export default function Masterfile() {
           <p className="text-muted text-sm">Resultados do negócio — calculados sozinhos a partir dos pagamentos, dos kits e do custo Starlink. Só o avulso (entradas e despesas fora do sistema) se lança à mão.</p>
         </div>
         <div className="flex gap-2 shrink-0 flex-wrap">
-          <button onClick={() => abrirForm("entrada")} className="flex items-center gap-2 border border-accent/50 text-accent px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-accent hover:text-bg transition-colors">
-            <ArrowDownLeft size={14} /> Lançar entrada
-          </button>
           <button onClick={() => abrirForm("despesa")} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors">
             <Plus size={14} /> Lançar despesa
+          </button>
+          <button onClick={() => abrirForm("entrada")} className="flex items-center gap-2 border border-accent/50 text-accent px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-accent hover:text-bg transition-colors">
+            <ArrowDownLeft size={14} /> Lançar entrada
           </button>
           <button onClick={exportCsv} disabled={resumo.length === 0} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors disabled:opacity-50">
             <Download size={14} /> Exportar Excel
