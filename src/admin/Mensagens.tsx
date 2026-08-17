@@ -33,7 +33,7 @@ export default function Mensagens() {
               <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
                 <div>
                   <h3 className="font-display text-xl text-fg">{m.nome || "—"}</h3>
-                  <p className="text-faint text-xs font-mono">{m.contacto} · {when(m.createdAt)}</p>
+                  <p className="text-faint text-xs font-mono break-all">{m.contacto} · {when(m.createdAt)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   {isPhone && <a href={`https://wa.me/${num}`} target="_blank" rel="noopener" className="inline-flex items-center gap-2 px-3 py-2 bg-[#25D366] text-white font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-[#20bd5a] transition-colors"><MessageCircle size={13} /> WhatsApp</a>}
@@ -41,7 +41,7 @@ export default function Mensagens() {
                 </div>
               </div>
               {m.assunto && <p className="text-sm text-fg font-medium mb-1">{m.assunto}</p>}
-              <p className="text-sm text-muted font-light whitespace-pre-line">{m.mensagem}</p>
+              <p className="text-sm text-muted font-light whitespace-pre-line break-words">{m.mensagem}</p>
             </div>
           );
         })}

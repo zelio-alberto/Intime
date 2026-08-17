@@ -179,7 +179,7 @@ export default function NovoCadastro() {
         <CheckCircle2 size={48} className="mx-auto mb-4 text-accent" />
         <h1 className="font-display text-3xl text-fg mb-2">Cliente cadastrado</h1>
         <p className="text-muted text-sm mb-6">{done.nome} — conta <span className="font-mono text-fg">{done.numeroConta}</span> · contrato <span className="font-mono text-fg">{done.numeroContrato}</span></p>
-        <div className="flex items-center justify-center gap-3">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button onClick={imprimirContrato} className="inline-flex items-center gap-2 px-6 py-3 bg-fg text-bg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:bg-accent transition-colors"><Printer size={15} /> Imprimir contrato</button>
           <button onClick={() => { setDone(null); setF({ ...Object.fromEntries(CAMPOS.map((k) => [k, ""])), dataInicio: hojeISO() } as Record<Campo, string>); setPacoteNome(""); setKitId(""); setFotos({}); setConfs({}); setLead(null); }} className="inline-flex items-center gap-2 px-6 py-3 border border-line text-fg font-mono text-[11px] uppercase tracking-[0.2em] font-bold hover:border-accent/50 transition-colors"><Plus size={15} /> Novo cadastro</button>
         </div>

@@ -138,7 +138,7 @@ export default function Transacoes() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mb-5">
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {([["todas", "Todas"], ["assoc", "Associadas"], ["porassoc", "Por associar"]] as const).map(([k, l]) => (
             <button key={k} onClick={() => setFiltro(k)}
               className={`px-4 py-2 text-xs font-mono uppercase tracking-[0.15em] border transition-colors ${filtro === k ? "bg-fg text-bg border-fg" : "border-line text-muted hover:text-fg"}`}>{l}</button>

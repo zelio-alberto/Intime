@@ -196,7 +196,7 @@ function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () => void }) {
             {msg && <div className="text-sm text-accent mb-3">{msg}</div>}
             {reg && (
               <div className="border border-line bg-bg p-4 mb-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div><label className={label}>Mês (YYYY-MM)</label><input className={input} value={mes} onChange={(e) => setMes(e.target.value)} placeholder="2026-07" /></div>
                   <div><label className={label}>Valor (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
                 </div>

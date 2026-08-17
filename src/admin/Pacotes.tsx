@@ -46,9 +46,9 @@ export default function Pacotes() {
       <div className="space-y-6">
         {cfg.plans.map((p, i) => (
           <div key={i} className="border border-line p-5 bg-card">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-y-3 mb-4">
               <span className="font-display text-lg text-fg">{p.name || `Pacote ${i + 1}`}</span>
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-4">
                 <label className="flex items-center gap-2 text-xs text-muted cursor-pointer"><input type="checkbox" checked={!!p.from} onChange={(e) => setPlan(i, { from: e.target.checked })} /> A partir de</label>
                 <label className="flex items-center gap-2 text-xs text-muted cursor-pointer"><input type="checkbox" checked={!!p.featured} onChange={(e) => setPlan(i, { featured: e.target.checked })} /> Destaque</label>
                 <button onClick={() => removePlan(i)} className="text-faint hover:text-accent" title="Remover"><Trash2 size={16} /></button>

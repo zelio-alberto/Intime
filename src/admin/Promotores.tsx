@@ -198,7 +198,7 @@ export default function Promotores() {
 
       {/* Links de cadastro (uso único) */}
       <section className={card + " mb-6"}>
-        <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-faint"><Ticket size={14} /> Links de cadastro por usar ({convites.length})</div>
           <button onClick={gerarConvite} disabled={gerando} className="flex items-center gap-2 bg-fg text-bg px-4 py-2 font-mono text-[10px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50 whitespace-nowrap">
             <Ticket size={14} /> {gerando ? "A gerar…" : "Gerar link"}
@@ -263,7 +263,7 @@ export default function Promotores() {
                     <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-1 bg-accent text-bg">{p.codigo}</span>
                     {!ativo && <span className="font-mono text-[9px] uppercase tracking-wider px-2 py-1 border border-line text-faint">inativo</span>}
                   </div>
-                  <div className="text-faint text-xs font-mono">{p.email || "sem email"} · {pct}% · {p.telefone || p.whatsapp || "sem telefone"}{p.zona ? ` · ${p.zona}` : ""}</div>
+                  <div className="text-faint text-xs font-mono break-words">{p.email || "sem email"} · {pct}% · {p.telefone || p.whatsapp || "sem telefone"}{p.zona ? ` · ${p.zona}` : ""}</div>
                   {(p.numeroPagamento || p.numeroMpesa) && (
                     <div className="text-accent text-xs font-mono mt-1">{p.metodoPagamento || "M-Pesa"}: {p.numeroPagamento || p.numeroMpesa}{(p.nomePagamento || p.nomeMpesa) ? ` (${p.nomePagamento || p.nomeMpesa})` : ""}</div>
                   )}

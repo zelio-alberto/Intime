@@ -115,7 +115,7 @@ export default function Financas() {
                 <div className="text-white/70 text-sm">Recebido em {monthLabel(mes)}</div>
                 <div className="font-display text-4xl md:text-5xl font-bold mt-1">{fmtMoney(calc.receitaMes)}</div>
                 <div className="text-white/50 text-sm">de {fmtMoney(calc.prevista)} previstos</div>
-                <div className="grid grid-cols-3 gap-4 mt-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6">
                   {[[fmtMoney(calc.receitaTotal), "Receita total"], [String(calc.emAtraso.length), "A dever"], [fmtMoney(calc.divida), "Em dívida"]].map(([v, l]) => (
                     <div key={l}><div className="text-lg font-bold">{v}</div><div className="text-white/60 text-xs">{l}</div></div>
                   ))}
@@ -214,7 +214,7 @@ export default function Financas() {
                       <div className="text-fg font-medium truncate">{nomeKit(k)}</div>
                       <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(k.estado || ""))}`}>{k.estado || (kitAlocado(k) ? "Alugado" : "Livre")}</span>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                       <div><div className="text-faint text-[11px]">Margem / mês</div><div className="text-accent font-bold">{slMes > 0 || k.mensalidade ? fmtMoney(margemMes) : "—"}</div></div>
                       <div><div className="text-faint text-[11px]">Custo do kit</div><div className="text-fg font-bold">{custoKit > 0 ? fmtMoney(custoKit) : "—"}</div></div>
                       <div><div className="text-faint text-[11px]">Lucro acumulado</div><div className={`font-bold ${lucroAcum >= 0 ? "text-accent" : "text-[#ff6b6b]"}`}>{lucroAcum >= 0 ? "+" : ""}{fmtMoney(lucroAcum)}</div></div>

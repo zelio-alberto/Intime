@@ -48,10 +48,19 @@ type NavDropdownProps = { group: Group; open: boolean; onToggle: () => void; onC
 
 function NavDropdown({ group, open, onToggle, onClose }: NavDropdownProps) {
   const { pathname } = useLocation();
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [topFix, setTopFix] = useState(0);
   const active = group.items.some((i) => pathname === i.to || pathname.startsWith(i.to + "/"));
+  // Em mobile a nav é um scroll horizontal (overflow-x-auto), que cortaria um
+  // dropdown absolute — por isso aí o menu abre "fixed", por baixo da barra.
+  const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
+  useEffect(() => {
+    if (open && btnRef.current) setTopFix(btnRef.current.getBoundingClientRect().bottom);
+  }, [open]);
   return (
-    <div className="relative">
+    <div className="md:relative">
       <button
+        ref={btnRef}
         type="button"
         onClick={onToggle}
         aria-expanded={open}
@@ -61,7 +70,10 @@ function NavDropdown({ group, open, onToggle, onClose }: NavDropdownProps) {
         <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full mt-px min-w-[230px] bg-bg border border-line shadow-2xl z-[60] py-1">
+        <div
+          className="fixed left-3 right-3 md:absolute md:left-0 md:right-auto md:top-full mt-px md:min-w-[230px] bg-bg border border-line shadow-2xl z-[60] py-1"
+          style={isMobile ? { top: topFix } : undefined}
+        >
           {group.items.map((it) => (
             <NavLink
               key={it.to}

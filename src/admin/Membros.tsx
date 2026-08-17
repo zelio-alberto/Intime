@@ -35,19 +35,19 @@ export default function Membros() {
       <section className={card}>
         {msg && <div className="mb-5 text-sm text-accent">{msg}</div>}
         {isMaster && (
-          <div className="flex gap-3 mb-6">
+          <div className="flex flex-col sm:flex-row gap-3 mb-6">
             <input className={input} placeholder="email@exemplo.com" value={novo} onChange={(e) => setNovo(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-            <button onClick={add} className="flex items-center gap-2 bg-fg text-bg px-5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors whitespace-nowrap"><UserPlus size={15} /> Adicionar</button>
+            <button onClick={add} className="flex items-center justify-center gap-2 bg-fg text-bg px-5 py-2.5 sm:py-0 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors whitespace-nowrap"><UserPlus size={15} /> Adicionar</button>
           </div>
         )}
         <div className="divide-y divide-[var(--line)]">
           <div className="flex items-center justify-between py-3">
-            <span className="text-sm">{MASTER_ADMIN} <span className="text-accent text-xs ml-2">(principal)</span></span>
+            <span className="text-sm min-w-0 truncate">{MASTER_ADMIN} <span className="text-accent text-xs ml-2">(principal)</span></span>
           </div>
           {members.filter((m) => m !== MASTER_ADMIN).map((m) => (
-            <div key={m} className="flex items-center justify-between py-3">
-              <span className="text-sm">{m}</span>
-              {isMaster && <button onClick={() => remove(m)} className="text-faint hover:text-accent" title="Remover"><Trash2 size={16} /></button>}
+            <div key={m} className="flex items-center justify-between gap-3 py-3">
+              <span className="text-sm min-w-0 truncate">{m}</span>
+              {isMaster && <button onClick={() => remove(m)} className="text-faint hover:text-accent shrink-0" title="Remover"><Trash2 size={16} /></button>}
             </div>
           ))}
           {members.filter((m) => m !== MASTER_ADMIN).length === 0 && <p className="text-faint text-sm py-3">Sem membros adicionais.</p>}

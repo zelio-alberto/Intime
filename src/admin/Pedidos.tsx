@@ -124,7 +124,7 @@ export default function Pedidos() {
         </form>
       )}
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2 mb-6">
         {["todos", ...STATUS].map((f) => (
           <button key={f} onClick={() => setFilter(f)} className={`font-mono text-[11px] uppercase tracking-widest px-3 py-2 transition-colors ${filter === f ? "bg-fg text-bg" : "border border-line text-faint hover:text-fg"}`}>
             {f === "todos" ? "Todos" : LABEL[f]}
@@ -147,7 +147,7 @@ export default function Pedidos() {
                   </div>
                   <p className="text-faint text-xs font-mono">{when(r.createdAt)}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {st !== "concluido" && (
                     <Link to={`/admin/novo?lead=${r.id}`} className="inline-flex items-center gap-2 px-4 py-2.5 bg-fg text-bg font-mono text-[10px] uppercase tracking-widest font-bold hover:bg-accent transition-colors"><UserPlus size={14} /> Converter</Link>
                   )}
@@ -171,7 +171,7 @@ export default function Pedidos() {
               </div>
               <div className="flex flex-wrap items-center gap-4 pt-4 border-t border-line">
                 {r.gps && <a href={`https://www.google.com/maps?q=${r.gps}`} target="_blank" rel="noopener" className="inline-flex items-center gap-2 text-xs text-muted hover:text-accent transition-colors"><MapPin size={14} /> Ver no mapa</a>}
-                <div className="flex items-center gap-2 ml-auto">
+                <div className="flex flex-wrap items-center gap-2 ml-auto">
                   <span className="text-[10px] font-mono uppercase text-faint">Estado:</span>
                   {STATUS.map((s) => (
                     <button key={s} onClick={() => setStatus(r.id, s)} className={`font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 transition-colors ${st === s ? "bg-fg text-bg" : "border border-line text-faint hover:text-fg"}`}>{LABEL[s]}</button>

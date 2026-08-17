@@ -425,7 +425,7 @@ export default function Masterfile() {
                 <span className={label}>Descrição *</span>
                 <input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder={formModo === "entrada" ? "Ex.: Venda de router usado" : "Ex.: Transporte de instalação"} className={input} />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <span className={label}>Valor (MT) *</span>
                   <input value={form.valor} onChange={(e) => setForm({ ...form, valor: e.target.value })} placeholder="500" inputMode="decimal" className={input} />

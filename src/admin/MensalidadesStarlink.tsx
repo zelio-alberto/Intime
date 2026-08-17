@@ -84,7 +84,7 @@ export default function MensalidadesStarlink() {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row items-start justify-between gap-3 mb-2">
         <div>
           <h1 className={pageTitle}>Mensalidades Starlink</h1>
           <p className="text-muted text-sm">Os pagamentos que a Intime deve fazer à Starlink por cada kit ativo. O estado vem do leitor de emails da Starlink; pode marcar como pago manualmente.</p>
