@@ -8,7 +8,8 @@ import { ArrowDownLeft, Download, Plus, Search, X, Satellite, Package, Wallet, T
 // Masterfile: demonstração de RESULTADOS do negócio, derivada automaticamente:
 //   entradas = pagamentos aprovados; custo Starlink = amount × kit alocado × mês;
 //   investimento = custoAquisicao do kit no mês de início.
-// Manual só as despesas não-sistemáticas (coleção `despesas`).
+// Manual só o não-sistemático (coleção `despesas`): despesas avulsas (tipo "outra")
+// e entradas avulsas (tipo "entrada" — ex.: venda de equipamento).
 
 type Categoria = "entrada" | "equipamento" | "starlink" | "outra";
 type Linha = {
@@ -65,6 +66,7 @@ export default function Masterfile() {
   const [mesFiltro, setMesFiltro] = useState("");
   const [busca, setBusca] = useState("");
   const [formAberto, setFormAberto] = useState(false);
+  const [formModo, setFormModo] = useState<"despesa" | "entrada">("despesa");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [form, setForm] = useState({ data: hojeIso(), valor: "", descricao: "", fornecedor: "", kitId: "" });
@@ -83,6 +85,8 @@ export default function Masterfile() {
   const aprovados = useMemo(() => pags.filter((p) => String(p.estado ?? "Aprovado") === "Aprovado"), [pags]);
   // só manuais (ignora docs eq_/sl_ antigos da v1, para nunca contar a dobrar)
   const manuais = useMemo(() => despesas.filter((d) => !d.id.startsWith("eq_") && !d.id.startsWith("sl_") && d.tipo !== "equipamento" && d.tipo !== "starlink"), [despesas]);
+  const despManuais = useMemo(() => manuais.filter((d) => d.tipo !== "entrada"), [manuais]);
+  const entrManuais = useMemo(() => manuais.filter((d) => d.tipo === "entrada"), [manuais]);
 
   // Início de cada kit = min(1º mês com pagamento, mês do createdAt).
   const kitInfo = useMemo(() => kits.filter(kitAlocado).map((k) => {
@@ -103,16 +107,17 @@ export default function Masterfile() {
     const porMes: Record<string, MesResumo> = {};
     const get = (mes: string) => (porMes[mes] ||= { mes, entradas: 0, starlink: 0, investimento: 0, outras: 0, resultado: 0, acumulado: 0 });
     for (const p of aprovados) if (p.mes) get(String(p.mes)).entradas += parseMoney(p.valor);
+    for (const e of entrManuais) if (e.mes) get(String(e.mes)).entradas += parseMoney(e.valor);
     for (const ki of kitInfo) {
       if (ki.custoKit) get(ki.inicio).investimento += ki.custoKit;
       for (const m of ki.meses) if (ki.custoSlMes) get(m).starlink += ki.custoSlMes;
     }
-    for (const d of manuais) if (d.mes) get(String(d.mes)).outras += parseMoney(d.valor);
+    for (const d of despManuais) if (d.mes) get(String(d.mes)).outras += parseMoney(d.valor);
     const lista = Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes));
     let acc = 0;
     for (const r of lista) { r.resultado = r.entradas - r.starlink - r.investimento - r.outras; acc += r.resultado; r.acumulado = acc; }
     return lista.reverse(); // mais recente primeiro
-  }, [aprovados, kitInfo, manuais]);
+  }, [aprovados, kitInfo, despManuais, entrManuais]);
 
   const tot = useMemo(() => {
     const t = { entradas: 0, starlink: 0, investimento: 0, outras: 0 };
@@ -154,7 +159,7 @@ export default function Masterfile() {
         });
       }
     }
-    for (const d of manuais) {
+    for (const d of despManuais) {
       linhas.push({
         id: `d_${d.id}`, ts: ms(d.data) || ms(d.createdAt), data: d.data instanceof Timestamp ? d.data : null,
         mes: String(d.mes || ""), categoria: "outra",
@@ -163,9 +168,18 @@ export default function Masterfile() {
         entrada: 0, saida: parseMoney(d.valor),
       });
     }
+    for (const e of entrManuais) {
+      linhas.push({
+        id: `e_${e.id}`, ts: ms(e.data) || ms(e.createdAt), data: e.data instanceof Timestamp ? e.data : null,
+        mes: String(e.mes || ""), categoria: "entrada",
+        descricao: String(e.descricao || "Entrada"),
+        detalhe: [e.fornecedor, e.kitNome].filter(Boolean).join(" · "),
+        entrada: parseMoney(e.valor), saida: 0,
+      });
+    }
     linhas.sort((a, b) => b.ts - a.ts);
     return linhas;
-  }, [aprovados, kitInfo, manuais]);
+  }, [aprovados, kitInfo, despManuais, entrManuais]);
 
   const meses = useMemo(() => resumo.map((r) => r.mes), [resumo]);
   const lista = livro.filter((l) => {
@@ -206,6 +220,13 @@ export default function Masterfile() {
     URL.revokeObjectURL(url);
   };
 
+  const abrirForm = (modo: "despesa" | "entrada") => {
+    setErro("");
+    setFormModo(modo);
+    setForm({ data: hojeIso(), valor: "", descricao: "", fornecedor: "", kitId: "" });
+    setFormAberto(true);
+  };
+
   const lancar = async () => {
     setErro("");
     const valor = parseMoney(form.valor);
@@ -214,10 +235,11 @@ export default function Masterfile() {
     const dataObj = new Date(`${form.data}T12:00:00`);
     if (isNaN(dataObj.getTime())) { setErro("Data inválida."); return; }
     const kit = kits.find((k) => k.id === form.kitId);
+    const ehEntrada = formModo === "entrada";
     setSalvando(true);
     try {
       await addDoc(collection(db, "despesas"), {
-        tipo: "outra",
+        tipo: ehEntrada ? "entrada" : "outra",
         descricao: form.descricao.trim(),
         fornecedor: form.fornecedor.trim(),
         valor,
@@ -228,7 +250,7 @@ export default function Masterfile() {
         by: auth.currentUser?.email || "",
         createdAt: serverTimestamp(),
       });
-      await logMov("despesa", `Despesa: ${form.descricao.trim()} · ${fmtMoney(valor)}`, { kitId: form.kitId || "", valor });
+      await logMov(ehEntrada ? "entrada" : "despesa", `${ehEntrada ? "Entrada" : "Despesa"}: ${form.descricao.trim()} · ${fmtMoney(valor)}`, { kitId: form.kitId || "", valor });
       setFormAberto(false);
       setForm({ data: hojeIso(), valor: "", descricao: "", fornecedor: "", kitId: "" });
     } catch {
@@ -237,7 +259,7 @@ export default function Masterfile() {
   };
 
   const cards = [
-    { label: "Recebido dos clientes", value: fmtMoney(tot.entradas), cls: "text-accent" },
+    { label: "Entradas (clientes + avulsas)", value: fmtMoney(tot.entradas), cls: "text-accent" },
     { label: "Pago à Starlink", value: fmtMoney(tot.starlink), cls: "text-[#7ab8ff]" },
     { label: "Investido em kits", value: fmtMoney(tot.investimento), cls: "text-[#e6b45a]" },
     { label: "Outras despesas", value: fmtMoney(tot.outras), cls: "text-muted" },
@@ -248,10 +270,13 @@ export default function Masterfile() {
       <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
         <div>
           <h1 className={pageTitle}>Masterfile</h1>
-          <p className="text-muted text-sm">Resultados do negócio — calculados sozinhos a partir dos pagamentos, dos kits e do custo Starlink. Só as despesas avulsas se lançam à mão.</p>
+          <p className="text-muted text-sm">Resultados do negócio — calculados sozinhos a partir dos pagamentos, dos kits e do custo Starlink. Só o avulso (entradas e despesas fora do sistema) se lança à mão.</p>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <button onClick={() => { setErro(""); setFormAberto(true); }} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors">
+        <div className="flex gap-2 shrink-0 flex-wrap">
+          <button onClick={() => abrirForm("entrada")} className="flex items-center gap-2 border border-accent/50 text-accent px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-accent hover:text-bg transition-colors">
+            <ArrowDownLeft size={14} /> Lançar entrada
+          </button>
+          <button onClick={() => abrirForm("despesa")} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors">
             <Plus size={14} /> Lançar despesa
           </button>
           <button onClick={exportCsv} disabled={resumo.length === 0} className="flex items-center gap-2 border border-line px-4 py-2.5 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors disabled:opacity-50">
@@ -386,15 +411,19 @@ export default function Masterfile() {
           <div className="relative w-full max-w-md h-full bg-bg border-l border-line overflow-y-auto">
             <div className="sticky top-0 bg-bg/95 backdrop-blur border-b border-line px-6 py-4 flex items-center justify-between gap-4">
               <div>
-                <div className="font-display text-xl text-fg">Lançar despesa</div>
-                <div className="text-faint text-xs">Só despesas avulsas (transporte, material…). Starlink e kits entram sozinhos.</div>
+                <div className="font-display text-xl text-fg">{formModo === "entrada" ? "Lançar entrada" : "Lançar despesa"}</div>
+                <div className="text-faint text-xs">
+                  {formModo === "entrada"
+                    ? "Só entradas avulsas (venda de equipamento, reembolso…). As mensalidades dos clientes entram sozinhas."
+                    : "Só despesas avulsas (transporte, material…). Starlink e kits entram sozinhos."}
+                </div>
               </div>
               <button onClick={() => setFormAberto(false)} className="w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg"><X size={16} /></button>
             </div>
             <div className="p-6 space-y-4">
               <div>
                 <span className={label}>Descrição *</span>
-                <input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Ex.: Transporte de instalação" className={input} />
+                <input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder={formModo === "entrada" ? "Ex.: Venda de router usado" : "Ex.: Transporte de instalação"} className={input} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -407,7 +436,7 @@ export default function Masterfile() {
                 </div>
               </div>
               <div>
-                <span className={label}>Fornecedor</span>
+                <span className={label}>{formModo === "entrada" ? "Origem / quem pagou" : "Fornecedor"}</span>
                 <input value={form.fornecedor} onChange={(e) => setForm({ ...form, fornecedor: e.target.value })} placeholder="Opcional" className={input} />
               </div>
               <div>
@@ -420,7 +449,7 @@ export default function Masterfile() {
               {erro && <p className="text-[#ff6b6b] text-sm">{erro}</p>}
               <button onClick={lancar} disabled={salvando}
                 className="w-full flex items-center justify-center gap-2 border border-line px-4 py-3 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors disabled:opacity-50">
-                <Wallet size={14} /> {salvando ? "A gravar…" : "Gravar despesa"}
+                {formModo === "entrada" ? <ArrowDownLeft size={14} /> : <Wallet size={14} />} {salvando ? "A gravar…" : formModo === "entrada" ? "Gravar entrada" : "Gravar despesa"}
               </button>
             </div>
           </div>
