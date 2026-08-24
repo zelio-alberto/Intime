@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { collection, onSnapshot, query, where, orderBy, getDocs, addDoc, serverTimestamp, type DocumentData } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
+import { collection, onSnapshot, query, orderBy, type DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
-import { pageTitle, input, label } from "./ui";
-import { fmtMoney, parseMoney, starlinkOf, margemMensal, fmtDateTime, estadoPillCls, monthKey, monthLabel, logMov } from "./gestaoUtils";
-import { Search, X, User, Wifi, Receipt, Plus } from "lucide-react";
+import { pageTitle } from "./ui";
+import { estadoPillCls } from "./gestaoUtils";
+import { Search, User } from "lucide-react";
+import FichaCliente from "./FichaCliente";
 
 type Cli = { id: string } & DocumentData;
 
@@ -35,7 +36,7 @@ export default function Clientes() {
   return (
     <div>
       <h1 className={pageTitle}>Clientes</h1>
-      <p className="text-muted text-sm mb-8">Todos os clientes Intime. Toque numa linha para ver a ficha, subscrição e pagamentos.</p>
+      <p className="text-muted text-sm mb-8">Todos os clientes Intime. Toque numa linha para abrir a ficha comercial: dados, kits, extrato, dívidas, próximas faturas e contrato.</p>
 
       <div className="grid sm:grid-cols-3 gap-4 mb-8">
         {stats.map((s) => (
@@ -78,163 +79,6 @@ export default function Clientes() {
       </div>
 
       {sel && <FichaCliente cli={sel} onClose={() => setSel(null)} />}
-    </div>
-  );
-}
-
-function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () => void }) {
-  const [kits, setKits] = useState<DocumentData[]>([]);
-  const [pags, setPags] = useState<DocumentData[]>([]);
-
-  const [reg, setReg] = useState(false);
-  const [mes, setMes] = useState(monthKey());
-  const [valor, setValor] = useState("");
-  const [metodo, setMetodo] = useState("M-Pesa");
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const carregarPags = async () => {
-    try { const ps = await getDocs(query(collection(db, "pagamentos"), where("clienteId", "==", cli.id), orderBy("data", "desc"))); setPags(ps.docs.map((d) => ({ id: d.id, ...d.data() }))); }
-    catch { try { const ps = await getDocs(query(collection(db, "pagamentos"), where("clienteId", "==", cli.id))); setPags(ps.docs.map((d) => ({ id: d.id, ...d.data() }))); } catch { /* */ } }
-  };
-
-  useEffect(() => {
-    (async () => {
-      try { const ks = await getDocs(query(collection(db, "kits"), where("clienteId", "==", cli.id))); setKits(ks.docs.map((d) => ({ id: d.id, ...d.data() }))); } catch { /* */ }
-      await carregarPags();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cli.id]);
-
-  const kit = kits[0];
-  const abrirReg = () => { setValor(kit?.mensalidade ? String(Math.round(parseMoney(kit.mensalidade))) : ""); setMes(monthKey()); setMsg(""); setReg(true); };
-  const registar = async () => {
-    if (parseMoney(valor) <= 0) { setMsg("Indique o valor."); return; }
-    setSaving(true); setMsg("");
-    try {
-      await addDoc(collection(db, "pagamentos"), {
-        kitId: kit?.id || "", clienteId: cli.id, clienteNome: cli.nome || "",
-        mes, valor: parseMoney(valor), metodo, estado: "Aprovado", tipo: "Mensalidade",
-        ...(kit?.promotor ? { promotor: kit.promotor } : {}),
-        data: serverTimestamp(),
-      });
-      await logMov("pagamento", `Pagamento ${monthLabel(mes)} · ${fmtMoney(parseMoney(valor))} (${metodo}) · ${cli.nome || ""}`, { kitId: kit?.id, clienteId: cli.id, valor: parseMoney(valor) });
-      setReg(false); setMsg("Pagamento registado ✓"); await carregarPags();
-    } catch { setMsg("Erro ao registar. Tente de novo."); }
-    finally { setSaving(false); }
-  };
-
-  const info: [string, string][] = [
-    ["Tipo", cli.tipo === "empresa" ? "Empresa" : "Particular"],
-    ["Conta", String(cli.numeroConta || "—")],
-    ["Documento", String(cli.documento || "—")],
-    ["WhatsApp", String(cli.whatsapp || "—")],
-    ["Email", String(cli.email || "—")],
-    ["Província", String(cli.provincia || "—")],
-    ["Cidade", String(cli.cidade || "—")],
-    ["Bairro", String(cli.bairro || "—")],
-    ["Referência", String(cli.referencia || "—")],
-    ["GPS", String(cli.gps || "—")],
-    ...(cli.tipo === "empresa" ? [["Empresa", String(cli.nomeEmpresa || "—")], ["NUIT", String(cli.nuit || "—")], ["Ramo", String(cli.tipoNegocio || "—")]] as [string, string][] : []),
-    ...(cli.promotor ? [["Promotor", String(cli.promotor)]] as [string, string][] : []),
-  ];
-
-  return (
-    <div className="fixed inset-0 z-[400] flex justify-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-xl h-full bg-bg border-l border-line overflow-y-auto">
-        <div className="sticky top-0 bg-bg/95 backdrop-blur border-b border-line px-6 py-4 flex items-center justify-between gap-4">
-          <div>
-            <div className="font-display text-2xl text-fg">{cli.nome || "—"}</div>
-            <div className="text-faint text-xs font-mono">{cli.numeroConta || ""}</div>
-          </div>
-          <button onClick={onClose} className="w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg"><X size={16} /></button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <Bloco icon={User} titulo="Dados">
-            <div className="grid sm:grid-cols-2 gap-x-6">
-              {info.map(([k, v]) => (
-                <div key={k} className="py-2.5 border-b border-line/60">
-                  <div className="text-faint text-[11px] font-mono uppercase tracking-widest">{k}</div>
-                  <div className="text-fg text-sm mt-0.5 break-words">{v}</div>
-                </div>
-              ))}
-            </div>
-          </Bloco>
-
-          <Bloco icon={Wifi} titulo="Subscrição / Starlink">
-            {kits.length === 0 ? <p className="text-faint text-sm">Sem kit alocado.</p> : kits.map((k) => {
-              const sl = starlinkOf(k);
-              const margem = margemMensal(k);
-              const rows: [string, string][] = [
-                ["Pacote", String(k.pacote || "—")],
-                ["Mensalidade (cliente)", k.mensalidade ? fmtMoney(parseMoney(k.mensalidade)) : "—"],
-                ["Custo Starlink", sl?.amount ? String(sl.amount) : "—"],
-                ["Margem mensal", fmtMoney(margem)],
-                ["Estado kit", String(k.estado || "—")],
-                ["Conta Starlink", String(sl?.accountId || k.conta || "—")],
-                ["Vencimento Starlink", String(sl?.dueDate || "—")],
-                ["Dia de pagamento", k.diaPagamento ? `Dia ${k.diaPagamento}` : "—"],
-              ];
-              return (
-                <div key={k.id} className="mb-4 last:mb-0">
-                  {rows.map(([rk, rv]) => (
-                    <div key={rk} className="flex justify-between gap-4 py-2 border-b border-line/60 last:border-0">
-                      <span className="text-muted text-sm">{rk}</span><span className="text-fg text-sm text-right">{rv}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </Bloco>
-
-          <Bloco icon={Receipt} titulo={`Pagamentos (${pags.length})`}>
-            <button onClick={reg ? () => setReg(false) : abrirReg} className="mb-4 inline-flex items-center gap-2 border border-line px-4 py-2 text-xs font-mono uppercase tracking-[0.15em] hover:bg-fg hover:text-bg transition-colors">
-              <Plus size={14} /> Registar pagamento
-            </button>
-            {msg && <div className="text-sm text-accent mb-3">{msg}</div>}
-            {reg && (
-              <div className="border border-line bg-bg p-4 mb-4 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div><label className={label}>Mês (YYYY-MM)</label><input className={input} value={mes} onChange={(e) => setMes(e.target.value)} placeholder="2026-07" /></div>
-                  <div><label className={label}>Valor (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
-                </div>
-                <div><label className={label}>Método</label>
-                  <select className={input} value={metodo} onChange={(e) => setMetodo(e.target.value)}>
-                    {["M-Pesa", "e-Mola", "Numerário", "Banco", "Outro"].map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <button onClick={registar} disabled={saving} className="w-full bg-fg text-bg py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
-                  {saving ? "A guardar…" : "Guardar pagamento"}
-                </button>
-              </div>
-            )}
-            {pags.length === 0 ? <p className="text-faint text-sm">Sem pagamentos.</p> : (
-              <div className="divide-y divide-[var(--line)]">
-                {pags.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="text-fg text-sm font-medium">{fmtMoney(parseMoney(p.valor))}</div>
-                      <div className="text-faint text-xs">{[p.mes, p.metodo, p.tipo].filter(Boolean).join(" · ")} · {fmtDateTime(p.data)}</div>
-                    </div>
-                    <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border shrink-0 ${estadoPillCls(String(p.estado || ""))}`}>{p.estado || "—"}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Bloco>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Bloco({ icon: Ic, titulo, children }: { icon: typeof User; titulo: string; children: ReactNode }) {
-  return (
-    <div className="border border-line bg-card p-5">
-      <div className="flex items-center gap-2 font-display text-lg text-fg mb-4"><Ic size={17} className="text-accent" /> {titulo}</div>
-      {children}
     </div>
   );
 }
