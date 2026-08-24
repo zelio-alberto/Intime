@@ -78,7 +78,18 @@ export default function Clientes() {
         )}
       </div>
 
-      {sel && <FichaCliente cli={sel} onClose={() => setSel(null)} />}
+      {sel && (() => {
+        const idx = lista.findIndex((c) => c.id === sel.id);
+        return (
+          <FichaCliente
+            cli={sel}
+            onClose={() => setSel(null)}
+            onPrev={idx > 0 ? () => setSel(lista[idx - 1]) : undefined}
+            onNext={idx >= 0 && idx < lista.length - 1 ? () => setSel(lista[idx + 1]) : undefined}
+            pos={idx >= 0 ? { i: idx, total: lista.length } : undefined}
+          />
+        );
+      })()}
     </div>
   );
 }

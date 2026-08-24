@@ -1,7 +1,8 @@
-// Ficha comercial do cliente (drawer do admin/Clientes): posição da conta
-// (próximo vencimento, dívida, total pago), dados completos, kits, extrato de
-// pagamentos e contrato — com ações de impressão (fatura, extrato, contrato)
-// e atalho de WhatsApp. Documentos imprimíveis em ./documentos.ts.
+// Ficha comercial do cliente (vista full-screen do admin/Clientes): posição da
+// conta (próximo vencimento, dívida, total pago), dados completos, kits,
+// extrato de pagamentos e contrato — com ações de impressão (fatura, extrato,
+// contrato), atalho de WhatsApp e navegação anterior/seguinte entre clientes
+// (botões ou setas do teclado). Documentos imprimíveis em ./documentos.ts.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   collection, doc, getDoc, getDocs, query, where, addDoc, serverTimestamp,
@@ -12,7 +13,7 @@ import { input, label } from "./ui";
 import { fmtMoney, parseMoney, starlinkOf, margemMensal, fmtDateTime, estadoPillCls, monthKey, monthLabel, logMov } from "./gestaoUtils";
 import { useSiteConfig } from "../useSiteConfig";
 import { abrirFatura, abrirProximaFatura, abrirExtrato, imprimirContrato } from "./documentos";
-import { X, User, Wifi, Receipt, Plus, FileText, Printer, MessageCircle, CalendarClock, ImageIcon } from "lucide-react";
+import { X, User, Wifi, Receipt, Plus, FileText, Printer, MessageCircle, CalendarClock, ImageIcon, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 
 type Cli = { id: string } & DocumentData;
 type Pag = { id: string } & DocumentData;
@@ -37,7 +38,10 @@ function proximaData(dados: DocumentData, pags: DocumentData[]): Date | null {
   return next;
 }
 
-export default function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () => void }) {
+export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
+  cli: Cli; onClose: () => void;
+  onPrev?: () => void; onNext?: () => void; pos?: { i: number; total: number };
+}) {
   const cfg = useSiteConfig();
   const [portal, setPortal] = useState<DocumentData | null>(null);
   const [kits, setKits] = useState<Pag[]>([]);
@@ -66,6 +70,9 @@ export default function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () =
   };
 
   useEffect(() => {
+    // limpar o estado do cliente anterior ao navegar entre fichas
+    setPortal(null); setKits([]); setPags([]); setCts([]);
+    setReg(false); setMsg("");
     (async () => {
       if (conta) { try { const p = await getDoc(doc(db, "portalContas", conta)); if (p.exists()) setPortal(p.data()); } catch { /* */ } }
       try { const ks = await getDocs(query(collection(db, "kits"), where("clienteId", "==", cli.id))); setKits(ks.docs.map((d) => ({ id: d.id, ...d.data() }))); } catch { /* */ }
@@ -78,6 +85,19 @@ export default function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () =
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cli.id]);
+
+  // teclado: Esc fecha, ←/→ navegam (fora de campos de texto)
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName)) return;
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft" && onPrev) onPrev();
+      else if (e.key === "ArrowRight" && onNext) onNext();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose, onPrev, onNext]);
 
   const kit = kits[0];
 
@@ -141,174 +161,193 @@ export default function FichaCliente({ cli, onClose }: { cli: Cli; onClose: () =
   const ct = cts[0] || null;
 
   const acao = "inline-flex items-center gap-2 border border-line px-3.5 py-2 text-[11px] font-mono uppercase tracking-[0.15em] text-fg hover:bg-fg hover:text-bg transition-colors";
+  const navBtn = "w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg hover:border-accent/50 transition-colors disabled:opacity-30 disabled:pointer-events-none";
 
   return (
-    <div className="fixed inset-0 z-[400] flex justify-end">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-2xl h-full bg-bg border-l border-line overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-line px-6 py-4">
+    <div className="fixed inset-0 z-[400] bg-bg overflow-y-auto">
+      <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-line">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <div className="font-display text-2xl text-fg truncate">{cli.nome || "—"}</div>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-faint text-xs font-mono">{conta}</span>
-                <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 border ${estadoPillCls(String(dados.estado))}`}>{dados.estado || "—"}</span>
+            <div className="flex items-center gap-4 min-w-0">
+              <button onClick={onClose} title="Voltar à lista (Esc)" className="inline-flex items-center gap-2 border border-line px-3 py-2 text-[11px] font-mono uppercase tracking-[0.15em] text-muted hover:text-fg hover:border-accent/50 transition-colors shrink-0">
+                <ArrowLeft size={14} /> <span className="hidden sm:inline">Clientes</span>
+              </button>
+              <div className="min-w-0">
+                <div className="font-display text-2xl text-fg truncate">{cli.nome || "—"}</div>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <span className="text-faint text-xs font-mono">{conta}</span>
+                  <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 border ${estadoPillCls(String(dados.estado))}`}>{dados.estado || "—"}</span>
+                </div>
               </div>
             </div>
-            <button onClick={onClose} className="w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg shrink-0"><X size={16} /></button>
+            <div className="flex items-center gap-2 shrink-0">
+              {pos && <span className="hidden sm:block text-faint text-xs font-mono mr-1">{pos.i + 1} / {pos.total}</span>}
+              <button onClick={onPrev} disabled={!onPrev} title="Cliente anterior (←)" className={navBtn}><ChevronLeft size={16} /></button>
+              <button onClick={onNext} disabled={!onNext} title="Cliente seguinte (→)" className={navBtn}><ChevronRight size={16} /></button>
+              <button onClick={onClose} title="Fechar (Esc)" className={`${navBtn} ml-1`}><X size={16} /></button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2 mt-3">
             {waLink && <a href={waLink} target="_blank" rel="noopener" className={acao}><MessageCircle size={13} /> WhatsApp</a>}
             {vence && <button onClick={() => abrirProximaFatura(dados, vence, cfg.contacts)} className={acao}><FileText size={13} /> Fatura provisória</button>}
             <button onClick={() => abrirExtrato(dados, pags, vence, divida, cfg.contacts)} className={acao}><Printer size={13} /> Extrato</button>
             <button onClick={() => imprimirContrato(ct, dados, cfg.contract, cfg.contacts)} className={acao}><Printer size={13} /> Contrato</button>
+            <button onClick={reg ? () => setReg(false) : abrirReg} className={acao}><Plus size={13} /> Registar pagamento</button>
           </div>
         </div>
+      </div>
 
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Tile label="Próximo vencimento" alerta={dias !== null && dias < 0}
-              value={vence ? fmtDia(vence) : "—"}
-              sub={dias === null ? "" : dias < 0 ? `vencida há ${-dias} dia${dias === -1 ? "" : "s"}` : dias === 0 ? "vence hoje" : `em ${dias} dia${dias === 1 ? "" : "s"}`} />
-            <Tile label="Mensalidade" value={mensal ? fmtMoney(mensal) : "—"} sub={dados.pacote || ""} />
-            <Tile label="Em dívida" alerta={divida > 0} value={fmtMoney(divida)} sub={divida > 0 ? "regularizar" : "em dia"} />
-            <Tile label="Total pago" value={fmtMoney(totalPago)} sub={`${pags.filter(aprovado).length} pagamento${pags.filter(aprovado).length === 1 ? "" : "s"}`} />
-          </div>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <Tile label="Próximo vencimento" alerta={dias !== null && dias < 0}
+            value={vence ? fmtDia(vence) : "—"}
+            sub={dias === null ? "" : dias < 0 ? `vencida há ${-dias} dia${dias === -1 ? "" : "s"}` : dias === 0 ? "vence hoje" : `em ${dias} dia${dias === 1 ? "" : "s"}`} />
+          <Tile label="Mensalidade" value={mensal ? fmtMoney(mensal) : "—"} sub={dados.pacote || ""} />
+          <Tile label="Em dívida" alerta={divida > 0} value={fmtMoney(divida)} sub={divida > 0 ? "regularizar" : "em dia"} />
+          <Tile label="Total pago" value={fmtMoney(totalPago)} sub={`${pags.filter(aprovado).length} pagamento${pags.filter(aprovado).length === 1 ? "" : "s"}`} />
+        </div>
 
-          <Bloco icon={User} titulo="Dados">
-            <div className="grid sm:grid-cols-2 gap-x-6">
-              {info.map(([k, v]) => (
-                <div key={k} className="py-2.5 border-b border-line/60">
-                  <div className="text-faint text-[11px] font-mono uppercase tracking-widest">{k}</div>
-                  <div className="text-fg text-sm mt-0.5 break-words">{v}</div>
-                </div>
-              ))}
-            </div>
-            {fotos.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-4">
-                {fotos.map(([k, u]) => (
-                  <a key={k} href={u} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 border border-line px-3 py-1.5 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg hover:border-accent/50 transition-colors">
-                    <ImageIcon size={12} /> Foto {k}
-                  </a>
+        <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
+          <div className="space-y-6">
+            <Bloco icon={User} titulo="Dados">
+              <div className="grid sm:grid-cols-2 gap-x-6">
+                {info.map(([k, v]) => (
+                  <div key={k} className="py-2.5 border-b border-line/60">
+                    <div className="text-faint text-[11px] font-mono uppercase tracking-widest">{k}</div>
+                    <div className="text-fg text-sm mt-0.5 break-words">{v}</div>
+                  </div>
                 ))}
               </div>
-            )}
-          </Bloco>
+              {fotos.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {fotos.map(([k, u]) => (
+                    <a key={k} href={u} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 border border-line px-3 py-1.5 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg hover:border-accent/50 transition-colors">
+                      <ImageIcon size={12} /> Foto {k}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </Bloco>
+          </div>
 
-          <Bloco icon={Wifi} titulo={`Kits (${kits.length})`}>
-            {kits.length === 0 ? <p className="text-faint text-sm">Sem kit alocado.</p> : kits.map((k) => {
-              const sl = starlinkOf(k);
-              const rows: [string, string][] = [
-                ["Pacote", String(k.pacote || "—")],
-                ["Mensalidade (cliente)", k.mensalidade ? fmtMoney(parseMoney(k.mensalidade)) : "—"],
-                ["Custo Starlink", sl?.amount ? String(sl.amount) : "—"],
-                ["Margem mensal", fmtMoney(margemMensal(k))],
-                ["Estado kit", String(k.estado || "—")],
-                ["Kit / série", String(k.kitSerial || sl?.kitSerial || "—")],
-                ["Conta Starlink", String(sl?.accountId || k.conta || "—")],
-                ["Vencimento Starlink", String(sl?.dueDate || "—")],
-                ["Dia de pagamento", k.diaPagamento ? `Dia ${k.diaPagamento}` : "—"],
-              ];
-              return (
-                <div key={k.id} className="mb-4 last:mb-0">
-                  {rows.map(([rk, rv]) => (
-                    <div key={rk} className="flex justify-between gap-4 py-2 border-b border-line/60 last:border-0">
-                      <span className="text-muted text-sm">{rk}</span><span className="text-fg text-sm text-right">{rv}</span>
+          <div className="space-y-6">
+            <Bloco icon={CalendarClock} titulo="Faturação">
+              <div className="space-y-2">
+                <Linha k="Próximo vencimento" v={vence ? `${fmtDia(vence)}${dias !== null ? ` (${dias < 0 ? `há ${-dias}d` : dias === 0 ? "hoje" : `em ${dias}d`})` : ""}` : "—"} alerta={dias !== null && dias < 0} />
+                <Linha k="Valor do próximo ciclo" v={fmtMoney(Math.round(parseMoney(dados.mensalidadePendente || dados.mensalidade)))} />
+                {dados.pacotePendente && <Linha k="Mudança agendada" v={`${dados.pacotePendente} · ${dados.mensalidadePendente || ""} MT (fim do ciclo)`} />}
+                {portal?.lembreteEmail?.due && <Linha k="Último lembrete (email)" v={`venc. ${portal.lembreteEmail.due} · enviado ${fmtDateTime(portal.lembreteEmail.em)}`} />}
+                {portal?.lembreteWa?.due && <Linha k="Último lembrete (WhatsApp)" v={`venc. ${portal.lembreteWa.due} · enviado ${fmtDateTime(portal.lembreteWa.em)}`} />}
+              </div>
+              {vence && (
+                <button onClick={() => abrirProximaFatura(dados, vence, cfg.contacts)} className={`${acao} mt-4`}>
+                  <FileText size={13} /> Fatura provisória do próximo ciclo
+                </button>
+              )}
+            </Bloco>
+
+            <Bloco icon={Wifi} titulo={`Kits (${kits.length})`}>
+              {kits.length === 0 ? <p className="text-faint text-sm">Sem kit alocado.</p> : kits.map((k) => {
+                const sl = starlinkOf(k);
+                const rows: [string, string][] = [
+                  ["Pacote", String(k.pacote || "—")],
+                  ["Mensalidade (cliente)", k.mensalidade ? fmtMoney(parseMoney(k.mensalidade)) : "—"],
+                  ["Custo Starlink", sl?.amount ? String(sl.amount) : "—"],
+                  ["Margem mensal", fmtMoney(margemMensal(k))],
+                  ["Estado kit", String(k.estado || "—")],
+                  ["Kit / série", String(k.kitSerial || sl?.kitSerial || "—")],
+                  ["Conta Starlink", String(sl?.accountId || k.conta || "—")],
+                  ["Vencimento Starlink", String(sl?.dueDate || "—")],
+                  ["Dia de pagamento", k.diaPagamento ? `Dia ${k.diaPagamento}` : "—"],
+                ];
+                return (
+                  <div key={k.id} className="mb-4 last:mb-0">
+                    {rows.map(([rk, rv]) => (
+                      <div key={rk} className="flex justify-between gap-4 py-2 border-b border-line/60 last:border-0">
+                        <span className="text-muted text-sm">{rk}</span><span className="text-fg text-sm text-right">{rv}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </Bloco>
+          </div>
+
+          <div className="space-y-6 lg:col-span-2 xl:col-span-1">
+            <Bloco icon={Receipt} titulo={`Extrato (${pags.length})`}>
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button onClick={reg ? () => setReg(false) : abrirReg} className={acao}><Plus size={13} /> Registar pagamento</button>
+                <button onClick={() => abrirExtrato(dados, pags, vence, divida, cfg.contacts)} className={acao}><Printer size={13} /> Imprimir extrato</button>
+              </div>
+              {msg && <div className="text-sm text-accent mb-3">{msg}</div>}
+              {reg && (
+                <div className="border border-line bg-bg p-4 mb-4 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label className={label}>Mês (YYYY-MM)</label><input className={input} value={mes} onChange={(e) => setMes(e.target.value)} placeholder="2026-07" /></div>
+                    <div><label className={label}>Valor (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
+                  </div>
+                  <div><label className={label}>Método</label>
+                    <select className={input} value={metodo} onChange={(e) => setMetodo(e.target.value)}>
+                      {["M-Pesa", "e-Mola", "Numerário", "Banco", "Outro"].map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={registar} disabled={saving} className="w-full bg-fg text-bg py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
+                    {saving ? "A guardar…" : "Guardar pagamento"}
+                  </button>
+                </div>
+              )}
+              {pags.length === 0 ? <p className="text-faint text-sm">Sem pagamentos.</p> : (
+                <div className="divide-y divide-[var(--line)]">
+                  {pags.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-4 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-fg text-sm font-medium">{fmtMoney(parseMoney(p.valor))}</div>
+                        <div className="text-faint text-xs">{[p.mes, p.metodo, p.tipo].filter(Boolean).join(" · ")} · {fmtDateTime(p.data)}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {aprovado(p) && (
+                          <button onClick={() => abrirFatura(p, dados, cfg.contacts)} title="Ver / imprimir fatura"
+                            className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors">
+                            <FileText size={12} /> Fatura
+                          </button>
+                        )}
+                        <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(p.estado || ""))}`}>{p.estado || "—"}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
-              );
-            })}
-          </Bloco>
+              )}
+            </Bloco>
 
-          <Bloco icon={CalendarClock} titulo="Faturação">
-            <div className="space-y-2">
-              <Linha k="Próximo vencimento" v={vence ? `${fmtDia(vence)}${dias !== null ? ` (${dias < 0 ? `há ${-dias}d` : dias === 0 ? "hoje" : `em ${dias}d`})` : ""}` : "—"} alerta={dias !== null && dias < 0} />
-              <Linha k="Valor do próximo ciclo" v={fmtMoney(Math.round(parseMoney(dados.mensalidadePendente || dados.mensalidade)))} />
-              {dados.pacotePendente && <Linha k="Mudança agendada" v={`${dados.pacotePendente} · ${dados.mensalidadePendente || ""} MT (fim do ciclo)`} />}
-              {portal?.lembreteEmail?.due && <Linha k="Último lembrete (email)" v={`venc. ${portal.lembreteEmail.due} · enviado ${fmtDateTime(portal.lembreteEmail.em)}`} />}
-              {portal?.lembreteWa?.due && <Linha k="Último lembrete (WhatsApp)" v={`venc. ${portal.lembreteWa.due} · enviado ${fmtDateTime(portal.lembreteWa.em)}`} />}
-            </div>
-            {vence && (
-              <button onClick={() => abrirProximaFatura(dados, vence, cfg.contacts)} className={`${acao} mt-4`}>
-                <FileText size={13} /> Fatura provisória do próximo ciclo
-              </button>
-            )}
-          </Bloco>
-
-          <Bloco icon={Receipt} titulo={`Extrato (${pags.length})`}>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <button onClick={reg ? () => setReg(false) : abrirReg} className={acao}><Plus size={13} /> Registar pagamento</button>
-              <button onClick={() => abrirExtrato(dados, pags, vence, divida, cfg.contacts)} className={acao}><Printer size={13} /> Imprimir extrato</button>
-            </div>
-            {msg && <div className="text-sm text-accent mb-3">{msg}</div>}
-            {reg && (
-              <div className="border border-line bg-bg p-4 mb-4 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div><label className={label}>Mês (YYYY-MM)</label><input className={input} value={mes} onChange={(e) => setMes(e.target.value)} placeholder="2026-07" /></div>
-                  <div><label className={label}>Valor (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
-                </div>
-                <div><label className={label}>Método</label>
-                  <select className={input} value={metodo} onChange={(e) => setMetodo(e.target.value)}>
-                    {["M-Pesa", "e-Mola", "Numerário", "Banco", "Outro"].map((m) => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                </div>
-                <button onClick={registar} disabled={saving} className="w-full bg-fg text-bg py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
-                  {saving ? "A guardar…" : "Guardar pagamento"}
-                </button>
-              </div>
-            )}
-            {pags.length === 0 ? <p className="text-faint text-sm">Sem pagamentos.</p> : (
-              <div className="divide-y divide-[var(--line)]">
-                {pags.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="text-fg text-sm font-medium">{fmtMoney(parseMoney(p.valor))}</div>
-                      <div className="text-faint text-xs">{[p.mes, p.metodo, p.tipo].filter(Boolean).join(" · ")} · {fmtDateTime(p.data)}</div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {aprovado(p) && (
-                        <button onClick={() => abrirFatura(p, dados, cfg.contacts)} title="Ver / imprimir fatura"
+            <Bloco icon={FileText} titulo={`Contrato${cts.length > 1 ? `s (${cts.length})` : ""}`}>
+              {cts.length === 0 ? (
+                <p className="text-faint text-sm mb-4">Sem contrato registado — a impressão usa os dados atuais do cliente e o texto padrão da config.</p>
+              ) : (
+                <div className="divide-y divide-[var(--line)] mb-4">
+                  {cts.map((c) => (
+                    <div key={c.id} className="flex items-center justify-between gap-4 py-2.5">
+                      <div className="min-w-0">
+                        <div className="text-fg text-sm font-medium">{c.numero || "—"}</div>
+                        <div className="text-faint text-xs">{[c.pacote, c.mensalidade ? `${c.mensalidade} MT` : "", c.dataInicio || fmtDateTime(c.createdAt)].filter(Boolean).join(" · ")}</div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => imprimirContrato(c, dados, cfg.contract, cfg.contacts)} title="Imprimir contrato"
                           className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors">
-                          <FileText size={12} /> Fatura
+                          <Printer size={12} /> Imprimir
                         </button>
-                      )}
-                      <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(p.estado || ""))}`}>{p.estado || "—"}</span>
+                        <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(c.estado || ""))}`}>{c.estado || "—"}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Bloco>
-
-          <Bloco icon={FileText} titulo={`Contrato${cts.length > 1 ? `s (${cts.length})` : ""}`}>
-            {cts.length === 0 ? (
-              <p className="text-faint text-sm mb-4">Sem contrato registado — a impressão usa os dados atuais do cliente e o texto padrão da config.</p>
-            ) : (
-              <div className="divide-y divide-[var(--line)] mb-4">
-                {cts.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between gap-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="text-fg text-sm font-medium">{c.numero || "—"}</div>
-                      <div className="text-faint text-xs">{[c.pacote, c.mensalidade ? `${c.mensalidade} MT` : "", c.dataInicio || fmtDateTime(c.createdAt)].filter(Boolean).join(" · ")}</div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={() => imprimirContrato(c, dados, cfg.contract, cfg.contacts)} title="Imprimir contrato"
-                        className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors">
-                        <Printer size={12} /> Imprimir
-                      </button>
-                      <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(c.estado || ""))}`}>{c.estado || "—"}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {cts.length === 0 && (
-              <button onClick={() => imprimirContrato(null, dados, cfg.contract, cfg.contacts)} className={acao}>
-                <Printer size={13} /> Imprimir contrato
-              </button>
-            )}
-          </Bloco>
+                  ))}
+                </div>
+              )}
+              {cts.length === 0 && (
+                <button onClick={() => imprimirContrato(null, dados, cfg.contract, cfg.contacts)} className={acao}>
+                  <Printer size={13} /> Imprimir contrato
+                </button>
+              )}
+            </Bloco>
+          </div>
         </div>
       </div>
     </div>
