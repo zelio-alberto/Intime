@@ -1,9 +1,10 @@
-// Ficha comercial do cliente (vista full-screen do admin/Clientes): posição da
-// conta (próximo vencimento, dívida, total pago), dados completos, kits,
-// extrato de pagamentos e contrato — com ações de impressão (fatura, extrato,
-// contrato), atalho de WhatsApp e navegação anterior/seguinte entre clientes
-// (botões ou setas do teclado). Documentos imprimíveis em ./documentos.ts.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+// Ficha comercial do cliente (vista full-screen do admin/Clientes): resumo da
+// posição da conta sempre visível (próximo vencimento, dívida, total pago) e
+// separadores Dados · Faturação · Kits · Extrato · Contrato — só se vê a secção
+// escolhida, sem scroll pelas outras. Navegação anterior/seguinte entre
+// clientes (botões ou setas do teclado) mantém o separador ativo.
+// Documentos imprimíveis em ./documentos.ts.
+import { useEffect, useMemo, useState } from "react";
 import {
   collection, doc, getDoc, getDocs, query, where, addDoc, serverTimestamp,
   Timestamp, type DocumentData,
@@ -13,10 +14,11 @@ import { input, label } from "./ui";
 import { fmtMoney, parseMoney, starlinkOf, margemMensal, fmtDateTime, estadoPillCls, monthKey, monthLabel, logMov } from "./gestaoUtils";
 import { useSiteConfig } from "../useSiteConfig";
 import { abrirFatura, abrirProximaFatura, abrirExtrato, imprimirContrato } from "./documentos";
-import { X, User, Wifi, Receipt, Plus, FileText, Printer, MessageCircle, CalendarClock, ImageIcon, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
+import { X, Plus, FileText, Printer, MessageCircle, ImageIcon, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 
 type Cli = { id: string } & DocumentData;
 type Pag = { id: string } & DocumentData;
+type Tab = "dados" | "faturacao" | "kits" | "extrato" | "contrato";
 
 const DAY = 86400000;
 const pagMs = (p: DocumentData) => (p.data instanceof Timestamp ? p.data.toMillis() : 0);
@@ -43,6 +45,7 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
   onPrev?: () => void; onNext?: () => void; pos?: { i: number; total: number };
 }) {
   const cfg = useSiteConfig();
+  const [tab, setTab] = useState<Tab>("dados");
   const [portal, setPortal] = useState<DocumentData | null>(null);
   const [kits, setKits] = useState<Pag[]>([]);
   const [pags, setPags] = useState<Pag[]>([]);
@@ -70,7 +73,7 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
   };
 
   useEffect(() => {
-    // limpar o estado do cliente anterior ao navegar entre fichas
+    // limpar o estado do cliente anterior ao navegar entre fichas (o separador mantém-se)
     setPortal(null); setKits([]); setPags([]); setCts([]);
     setReg(false); setMsg("");
     (async () => {
@@ -162,11 +165,20 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
 
   const acao = "inline-flex items-center gap-2 border border-line px-3.5 py-2 text-[11px] font-mono uppercase tracking-[0.15em] text-fg hover:bg-fg hover:text-bg transition-colors";
   const navBtn = "w-9 h-9 grid place-items-center border border-line text-muted hover:text-fg hover:border-accent/50 transition-colors disabled:opacity-30 disabled:pointer-events-none";
+  const miniBtn = "inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors";
+
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "dados", label: "Dados" },
+    { id: "faturacao", label: "Faturação" },
+    { id: "kits", label: `Kits${kits.length ? ` (${kits.length})` : ""}` },
+    { id: "extrato", label: `Extrato${pags.length ? ` (${pags.length})` : ""}` },
+    { id: "contrato", label: cts.length > 1 ? `Contratos (${cts.length})` : "Contrato" },
+  ];
 
   return (
     <div className="fixed inset-0 z-[400] bg-bg overflow-y-auto">
       <div className="sticky top-0 z-10 bg-bg/95 backdrop-blur border-b border-line">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-5xl mx-auto px-6 pt-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
               <button onClick={onClose} title="Voltar à lista (Esc)" className="inline-flex items-center gap-2 border border-line px-3 py-2 text-[11px] font-mono uppercase tracking-[0.15em] text-muted hover:text-fg hover:border-accent/50 transition-colors shrink-0">
@@ -187,17 +199,18 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
               <button onClick={onClose} title="Fechar (Esc)" className={`${navBtn} ml-1`}><X size={16} /></button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 mt-3">
-            {waLink && <a href={waLink} target="_blank" rel="noopener" className={acao}><MessageCircle size={13} /> WhatsApp</a>}
-            {vence && <button onClick={() => abrirProximaFatura(dados, vence, cfg.contacts)} className={acao}><FileText size={13} /> Fatura provisória</button>}
-            <button onClick={() => abrirExtrato(dados, pags, vence, divida, cfg.contacts)} className={acao}><Printer size={13} /> Extrato</button>
-            <button onClick={() => imprimirContrato(ct, dados, cfg.contract, cfg.contacts)} className={acao}><Printer size={13} /> Contrato</button>
-            <button onClick={reg ? () => setReg(false) : abrirReg} className={acao}><Plus size={13} /> Registar pagamento</button>
+          <div className="flex gap-1 overflow-x-auto mt-4 -mb-px">
+            {TABS.map((t) => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`px-4 py-2.5 text-[11px] font-mono uppercase tracking-[0.15em] border-b-2 whitespace-nowrap transition-colors ${tab === t.id ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}>
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-5xl mx-auto p-6 space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Tile label="Próximo vencimento" alerta={dias !== null && dias < 0}
             value={vence ? fmtDia(vence) : "—"}
@@ -207,9 +220,9 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
           <Tile label="Total pago" value={fmtMoney(totalPago)} sub={`${pags.filter(aprovado).length} pagamento${pags.filter(aprovado).length === 1 ? "" : "s"}`} />
         </div>
 
-        <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
-          <div className="space-y-6">
-            <Bloco icon={User} titulo="Dados">
+        <div className="border border-line bg-card p-5 md:p-6">
+          {tab === "dados" && (
+            <>
               <div className="grid sm:grid-cols-2 gap-x-6">
                 {info.map(([k, v]) => (
                   <div key={k} className="py-2.5 border-b border-line/60">
@@ -218,63 +231,61 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
                   </div>
                 ))}
               </div>
-              {fotos.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {fotos.map(([k, u]) => (
-                    <a key={k} href={u} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 border border-line px-3 py-1.5 text-[11px] font-mono uppercase tracking-widest text-muted hover:text-fg hover:border-accent/50 transition-colors">
-                      <ImageIcon size={12} /> Foto {k}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </Bloco>
-          </div>
+              <div className="flex flex-wrap gap-2 mt-5">
+                {waLink && <a href={waLink} target="_blank" rel="noopener" className={acao}><MessageCircle size={13} /> WhatsApp</a>}
+                {fotos.map(([k, u]) => (
+                  <a key={k} href={u} target="_blank" rel="noopener" className={acao}><ImageIcon size={13} /> Foto {k}</a>
+                ))}
+              </div>
+            </>
+          )}
 
-          <div className="space-y-6">
-            <Bloco icon={CalendarClock} titulo="Faturação">
+          {tab === "faturacao" && (
+            <>
               <div className="space-y-2">
                 <Linha k="Próximo vencimento" v={vence ? `${fmtDia(vence)}${dias !== null ? ` (${dias < 0 ? `há ${-dias}d` : dias === 0 ? "hoje" : `em ${dias}d`})` : ""}` : "—"} alerta={dias !== null && dias < 0} />
                 <Linha k="Valor do próximo ciclo" v={fmtMoney(Math.round(parseMoney(dados.mensalidadePendente || dados.mensalidade)))} />
+                <Linha k="Em dívida" v={fmtMoney(divida)} alerta={divida > 0} />
                 {dados.pacotePendente && <Linha k="Mudança agendada" v={`${dados.pacotePendente} · ${dados.mensalidadePendente || ""} MT (fim do ciclo)`} />}
                 {portal?.lembreteEmail?.due && <Linha k="Último lembrete (email)" v={`venc. ${portal.lembreteEmail.due} · enviado ${fmtDateTime(portal.lembreteEmail.em)}`} />}
                 {portal?.lembreteWa?.due && <Linha k="Último lembrete (WhatsApp)" v={`venc. ${portal.lembreteWa.due} · enviado ${fmtDateTime(portal.lembreteWa.em)}`} />}
               </div>
-              {vence && (
-                <button onClick={() => abrirProximaFatura(dados, vence, cfg.contacts)} className={`${acao} mt-4`}>
-                  <FileText size={13} /> Fatura provisória do próximo ciclo
-                </button>
-              )}
-            </Bloco>
+              <div className="flex flex-wrap gap-2 mt-5">
+                {vence && <button onClick={() => abrirProximaFatura(dados, vence, cfg.contacts)} className={acao}><FileText size={13} /> Fatura provisória</button>}
+                <button onClick={() => abrirExtrato(dados, pags, vence, divida, cfg.contacts)} className={acao}><Printer size={13} /> Imprimir extrato</button>
+                <button onClick={() => { setTab("extrato"); abrirReg(); }} className={acao}><Plus size={13} /> Registar pagamento</button>
+              </div>
+            </>
+          )}
 
-            <Bloco icon={Wifi} titulo={`Kits (${kits.length})`}>
-              {kits.length === 0 ? <p className="text-faint text-sm">Sem kit alocado.</p> : kits.map((k) => {
-                const sl = starlinkOf(k);
-                const rows: [string, string][] = [
-                  ["Pacote", String(k.pacote || "—")],
-                  ["Mensalidade (cliente)", k.mensalidade ? fmtMoney(parseMoney(k.mensalidade)) : "—"],
-                  ["Custo Starlink", sl?.amount ? String(sl.amount) : "—"],
-                  ["Margem mensal", fmtMoney(margemMensal(k))],
-                  ["Estado kit", String(k.estado || "—")],
-                  ["Kit / série", String(k.kitSerial || sl?.kitSerial || "—")],
-                  ["Conta Starlink", String(sl?.accountId || k.conta || "—")],
-                  ["Vencimento Starlink", String(sl?.dueDate || "—")],
-                  ["Dia de pagamento", k.diaPagamento ? `Dia ${k.diaPagamento}` : "—"],
-                ];
-                return (
-                  <div key={k.id} className="mb-4 last:mb-0">
-                    {rows.map(([rk, rv]) => (
-                      <div key={rk} className="flex justify-between gap-4 py-2 border-b border-line/60 last:border-0">
-                        <span className="text-muted text-sm">{rk}</span><span className="text-fg text-sm text-right">{rv}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </Bloco>
-          </div>
+          {tab === "kits" && (
+            kits.length === 0 ? <p className="text-faint text-sm">Sem kit alocado.</p> : kits.map((k) => {
+              const sl = starlinkOf(k);
+              const rows: [string, string][] = [
+                ["Pacote", String(k.pacote || "—")],
+                ["Mensalidade (cliente)", k.mensalidade ? fmtMoney(parseMoney(k.mensalidade)) : "—"],
+                ["Custo Starlink", sl?.amount ? String(sl.amount) : "—"],
+                ["Margem mensal", fmtMoney(margemMensal(k))],
+                ["Estado kit", String(k.estado || "—")],
+                ["Kit / série", String(k.kitSerial || sl?.kitSerial || "—")],
+                ["Conta Starlink", String(sl?.accountId || k.conta || "—")],
+                ["Vencimento Starlink", String(sl?.dueDate || "—")],
+                ["Dia de pagamento", k.diaPagamento ? `Dia ${k.diaPagamento}` : "—"],
+              ];
+              return (
+                <div key={k.id} className="mb-4 last:mb-0">
+                  {rows.map(([rk, rv]) => (
+                    <div key={rk} className="flex justify-between gap-4 py-2 border-b border-line/60 last:border-0">
+                      <span className="text-muted text-sm">{rk}</span><span className="text-fg text-sm text-right">{rv}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })
+          )}
 
-          <div className="space-y-6 lg:col-span-2 xl:col-span-1">
-            <Bloco icon={Receipt} titulo={`Extrato (${pags.length})`}>
+          {tab === "extrato" && (
+            <>
               <div className="flex flex-wrap gap-2 mb-4">
                 <button onClick={reg ? () => setReg(false) : abrirReg} className={acao}><Plus size={13} /> Registar pagamento</button>
                 <button onClick={() => abrirExtrato(dados, pags, vence, divida, cfg.contacts)} className={acao}><Printer size={13} /> Imprimir extrato</button>
@@ -306,8 +317,7 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {aprovado(p) && (
-                          <button onClick={() => abrirFatura(p, dados, cfg.contacts)} title="Ver / imprimir fatura"
-                            className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors">
+                          <button onClick={() => abrirFatura(p, dados, cfg.contacts)} title="Ver / imprimir fatura" className={miniBtn}>
                             <FileText size={12} /> Fatura
                           </button>
                         )}
@@ -317,9 +327,11 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
                   ))}
                 </div>
               )}
-            </Bloco>
+            </>
+          )}
 
-            <Bloco icon={FileText} titulo={`Contrato${cts.length > 1 ? `s (${cts.length})` : ""}`}>
+          {tab === "contrato" && (
+            <>
               {cts.length === 0 ? (
                 <p className="text-faint text-sm mb-4">Sem contrato registado — a impressão usa os dados atuais do cliente e o texto padrão da config.</p>
               ) : (
@@ -331,8 +343,7 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
                         <div className="text-faint text-xs">{[c.pacote, c.mensalidade ? `${c.mensalidade} MT` : "", c.dataInicio || fmtDateTime(c.createdAt)].filter(Boolean).join(" · ")}</div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => imprimirContrato(c, dados, cfg.contract, cfg.contacts)} title="Imprimir contrato"
-                          className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2.5 py-1 border border-line text-fg hover:bg-fg hover:text-bg transition-colors">
+                        <button onClick={() => imprimirContrato(c, dados, cfg.contract, cfg.contacts)} title="Imprimir contrato" className={miniBtn}>
                           <Printer size={12} /> Imprimir
                         </button>
                         <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 border ${estadoPillCls(String(c.estado || ""))}`}>{c.estado || "—"}</span>
@@ -346,8 +357,8 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
                   <Printer size={13} /> Imprimir contrato
                 </button>
               )}
-            </Bloco>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -369,15 +380,6 @@ function Linha({ k, v, alerta }: { k: string; v: string; alerta?: boolean }) {
     <div className="flex justify-between gap-4 py-2 border-b border-line/60 last:border-0">
       <span className="text-muted text-sm">{k}</span>
       <span className={`text-sm text-right ${alerta ? "text-[#ff6b6b]" : "text-fg"}`}>{v}</span>
-    </div>
-  );
-}
-
-function Bloco({ icon: Ic, titulo, children }: { icon: typeof User; titulo: string; children: ReactNode }) {
-  return (
-    <div className="border border-line bg-card p-5">
-      <div className="flex items-center gap-2 font-display text-lg text-fg mb-4"><Ic size={17} className="text-accent" /> {titulo}</div>
-      {children}
     </div>
   );
 }
