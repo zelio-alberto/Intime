@@ -4,7 +4,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAdminAuth } from "./useAdminAuth";
 import { ConfigProvider, useConfig } from "./ConfigContext";
-import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink, ArrowDownLeft, Satellite, Users, Receipt, History, FileText, Map, UserPlus, TrendingUp, ChevronDown, BookOpen, Lightbulb } from "lucide-react";
+import { LayoutDashboard, Inbox, Settings, LogOut, Loader2, ExternalLink, ArrowDownLeft, Satellite, Users, Receipt, History, FileText, Map, UserPlus, TrendingUp, ChevronDown, BookOpen, Lightbulb, CalendarClock } from "lucide-react";
 
 type Item = { to: string; end?: boolean; label: string; icon: typeof Users };
 type Group = { label: string; icon: typeof Users; items: Item[] };
@@ -29,6 +29,7 @@ const GROUPS: Group[] = [
   {
     label: "Finanças", icon: TrendingUp, items: [
       { to: "/admin/financas", label: "Resumo financeiro", icon: TrendingUp },
+      { to: "/admin/vencimentos", label: "Próximos pagamentos", icon: CalendarClock },
       { to: "/admin/masterfile", label: "Masterfile", icon: BookOpen },
       { to: "/admin/estrategias", label: "Estratégias", icon: Lightbulb },
       { to: "/admin/transacoes", label: "Transações", icon: ArrowDownLeft },

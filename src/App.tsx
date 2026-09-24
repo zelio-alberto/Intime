@@ -33,6 +33,7 @@ import Contratos from './admin/Contratos';
 import Mapa from './admin/Mapa';
 import NovoCadastro from './admin/NovoCadastro';
 import Financas from './admin/Financas';
+import Vencimentos from './admin/Vencimentos';
 import Masterfile from './admin/Masterfile';
 import Estrategias from './admin/Estrategias';
 
@@ -62,6 +63,7 @@ export default function App() {
             <Route path="suporte" element={<SuporteAdmin />} />
           </Route>
           <Route path="financas" element={<Financas />} />
+          <Route path="vencimentos" element={<Vencimentos />} />
           <Route path="masterfile" element={<Masterfile />} />
           <Route path="estrategias" element={<Estrategias />} />
           <Route path="novo" element={<NovoCadastro />} />

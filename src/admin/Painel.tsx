@@ -4,7 +4,8 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "../firebase";
 import { useConfig } from "./ConfigContext";
 import { pageTitle } from "./ui";
-import { Inbox, Mail, Boxes, ArrowRight } from "lucide-react";
+import { useVencimentos } from "./Vencimentos";
+import { Inbox, Mail, Boxes, ArrowRight, CalendarClock } from "lucide-react";
 
 function when(ts: any): string {
   try { return ts?.toDate ? ts.toDate().toLocaleString("pt-PT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""; } catch { return ""; }
@@ -12,6 +13,7 @@ function when(ts: any): string {
 
 export default function Painel() {
   const { cfg } = useConfig();
+  const { linhas } = useVencimentos();
   const [reqs, setReqs] = useState<any[]>([]);
   const [msgs, setMsgs] = useState<any[]>([]);
 
@@ -24,9 +26,11 @@ export default function Painel() {
   const novos = reqs.filter((r) => (r.status || "novo") === "novo").length;
   const recent = [...reqs].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)).slice(0, 5);
 
+  const emAtraso = linhas.filter((l) => l.dias !== null && l.dias < 0).length;
+
   const stats = [
     { label: "Pedidos novos", value: novos, to: "/admin/solicitacoes", icon: Inbox, accent: true },
-    { label: "Total de pedidos", value: reqs.length, to: "/admin/solicitacoes", icon: Inbox },
+    { label: emAtraso > 0 ? "Renovações em atraso" : "Renovações (em dia)", value: emAtraso, to: "/admin/vencimentos", icon: CalendarClock, accent: true },
     { label: "Mensagens", value: msgs.length, to: "/admin/solicitacoes/mensagens", icon: Mail },
     { label: "Pacotes ativos", value: cfg.plans.length, to: "/admin/config", icon: Boxes },
   ];
