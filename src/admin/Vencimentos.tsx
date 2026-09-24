@@ -18,6 +18,9 @@ export type Venc = {
   conta: string; clienteId: string; nome: string; estado: string; base: string;
   mensalidade: number; corrigida: boolean; vence: Date | null; dias: number | null;
   whatsapp: string; dados: DocumentData;
+  // desalinhamento com a Starlink: dueDate do kit e gap = dias que o cliente
+  // vence DEPOIS da Starlink cobrar a Intime (>0 = Intime a financiar).
+  starlinkDue: Date | null; gap: number | null;
 };
 
 const aprovado = (p: DocumentData) => { const e = String(p.estado || "").toLowerCase(); return e.includes("aprov") || e.includes("pago"); };
@@ -26,9 +29,8 @@ const tsToDate = (v: unknown): Date | null => {
   if (typeof v === "string") { const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
   return null;
 };
-const pagMs = (p: DocumentData) => (p.data instanceof Timestamp ? p.data.toMillis() : 0);
 
-function calcular(portais: Cli[], clientes: Cli[], pagamentos: DocumentData[]): Venc[] {
+function calcular(portais: Cli[], clientes: Cli[], pagamentos: DocumentData[], kits: Cli[]): Venc[] {
   const cliPorConta = new Map<string, Cli>();
   for (const c of clientes) { const n = String(c.numeroConta || c.conta || ""); if (n) cliPorConta.set(n, c); }
   const pagsPorConta = new Map<string, DocumentData[]>();
@@ -36,6 +38,8 @@ function calcular(portais: Cli[], clientes: Cli[], pagamentos: DocumentData[]): 
     const n = String(p.numeroConta || ""); if (!n) continue;
     const arr = pagsPorConta.get(n) || []; arr.push(p); pagsPorConta.set(n, arr);
   }
+  const kitPorCliente = new Map<string, Cli>();
+  for (const k of kits) { const id = String(k.clienteId || ""); if (id && !kitPorCliente.has(id)) kitPorCliente.set(id, k); }
 
   const out: Venc[] = [];
   for (const portal of portais) {
@@ -46,17 +50,26 @@ function calcular(portais: Cli[], clientes: Cli[], pagamentos: DocumentData[]): 
     const estado = String(d.estado || "").toLowerCase();
     if (estado.includes("cancel") || estado.includes("suspens")) continue;
 
-    // último pagamento aprovado (mais recente primeiro), como na FichaCliente
-    const pags = (pagsPorConta.get(conta) || []).slice().sort((a, b) => pagMs(b) - pagMs(a));
-    const aprov = pags.find(aprovado);
+    // base = pagamento aprovado com o ciclo mais avançado (cicloInicio||data
+    // máximo) — com adiantamentos há vários docs com a mesma data
     let base: Date | null = null, baseTxt = "";
-    if (aprov && (tsToDate(aprov.cicloInicio) || tsToDate(aprov.data))) {
-      base = tsToDate(aprov.cicloInicio) || tsToDate(aprov.data); baseTxt = "últ. pagamento";
-    } else if (tsToDate(d.ativadoEm)) { base = tsToDate(d.ativadoEm); baseTxt = "ativação"; }
+    for (const p of pagsPorConta.get(conta) || []) {
+      if (!aprovado(p)) continue;
+      const dt = tsToDate(p.cicloInicio) || tsToDate(p.data);
+      if (dt && (!base || dt > base)) base = dt;
+    }
+    if (base) baseTxt = "últ. pagamento";
+    else if (tsToDate(d.ativadoEm)) { base = tsToDate(d.ativadoEm); baseTxt = "ativação"; }
     else if (tsToDate(d.createdAt)) { base = tsToDate(d.createdAt); baseTxt = "criação"; }
     const vence = base ? new Date(base.getTime() + 30 * DAY) : tsToDate(d.dueDate);
     if (!base && vence) baseTxt = "dueDate";
     const dias = vence ? Math.ceil((vence.getTime() - Date.now()) / DAY) : null;
+
+    const clienteId = String(portal.clienteId || cli?.id || "");
+    const kit = clienteId ? kitPorCliente.get(clienteId) : undefined;
+    const slDueRaw = kit?.starlink && typeof kit.starlink === "object" ? (kit.starlink as DocumentData).dueDate : null;
+    const starlinkDue = tsToDate(slDueRaw);
+    const gap = vence && starlinkDue ? Math.round((vence.getTime() - starlinkDue.getTime()) / DAY) : null;
 
     // guarda p/ mensalidade corrompida (3.5 gravado em vez de 3500)
     let mensal = parseMoney(d.mensalidade);
@@ -64,13 +77,12 @@ function calcular(portais: Cli[], clientes: Cli[], pagamentos: DocumentData[]): 
     if (corrigida) mensal *= 1000;
 
     out.push({
-      conta,
-      clienteId: String(portal.clienteId || cli?.id || ""),
+      conta, clienteId,
       nome: String(d.nome || cli?.nome || ""),
       estado: String(d.estado || "—"),
       base: baseTxt, mensalidade: mensal, corrigida, vence, dias,
       whatsapp: String(cli?.whatsapp || cli?.telefone || ""),
-      dados: d,
+      dados: d, starlinkDue, gap,
     });
   }
 
@@ -88,16 +100,18 @@ export function useVencimentos() {
   const [portais, setPortais] = useState<Cli[]>([]);
   const [clientes, setClientes] = useState<Cli[]>([]);
   const [pags, setPags] = useState<DocumentData[]>([]);
+  const [kits, setKits] = useState<Cli[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, "portalContas"), (s) => { setPortais(s.docs.map((d) => ({ id: d.id, ...d.data() }))); setLoading(false); }, () => setLoading(false));
     const u2 = onSnapshot(collection(db, "clientes"), (s) => setClientes(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
     const u3 = onSnapshot(collection(db, "pagamentos"), (s) => setPags(s.docs.map((d) => d.data())), () => {});
-    return () => { u1(); u2(); u3(); };
+    const u4 = onSnapshot(collection(db, "kits"), (s) => setKits(s.docs.map((d) => ({ id: d.id, ...d.data() }))), () => {});
+    return () => { u1(); u2(); u3(); u4(); };
   }, []);
 
-  const linhas = useMemo(() => calcular(portais, clientes, pags), [portais, clientes, pags]);
+  const linhas = useMemo(() => calcular(portais, clientes, pags, kits), [portais, clientes, pags, kits]);
   return { linhas, clientes, loading };
 }
 
@@ -153,10 +167,13 @@ export default function Vencimentos() {
     return `https://wa.me/${n}?text=${encodeURIComponent(texto)}`;
   };
 
+  const desalinhados = linhas.filter((l) => l.gap !== null && l.gap > 7);
+
   const stats = [
     { label: `Em atraso (${atraso.length})`, value: fmtMoney(totalAtraso, false), danger: atraso.length > 0 },
     { label: `A vencer ≤7 dias (${aVencer.length})`, value: fmtMoney(totalAVencer, false), accent: aVencer.length > 0 },
     { label: "Previsto no ciclo (MT)", value: fmtMoney(totalPrevisto, false) },
+    { label: "Desalinhados c/ Starlink (>7d)", value: String(desalinhados.length), danger: desalinhados.length > 0 },
   ];
 
   return (
@@ -164,7 +181,7 @@ export default function Vencimentos() {
       <h1 className={pageTitle}>Próximos pagamentos</h1>
       <p className="text-muted text-sm mb-8">Quem vence quando, quem está em dívida e quanto vem aí — pela regra dos 30 dias após o último pagamento aprovado.</p>
 
-      <div className="grid sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {stats.map((s) => (
           <div key={s.label} className={`border p-6 ${s.danger ? "border-[#ff6b6b]/50 bg-[#ff6b6b]/[0.05]" : s.accent ? "border-accent bg-accent/[0.05]" : "border-line bg-card"}`}>
             <div className={`font-display text-4xl leading-none mb-1 ${s.danger ? "text-[#ff6b6b]" : s.accent ? "text-accent" : "text-fg"}`}>{s.value}</div>
@@ -183,8 +200,8 @@ export default function Vencimentos() {
       </div>
 
       <div className="border border-line bg-card">
-        <div className="hidden md:grid grid-cols-[1.4fr_auto_auto_auto_auto_auto] gap-4 px-6 py-3 border-b border-line text-faint text-[11px] font-mono uppercase tracking-widest">
-          <span>Cliente</span><span>Conta</span><span>Vence</span><span>Mensalidade</span><span>Base</span><span className="justify-self-end">Ações</span>
+        <div className="hidden md:grid grid-cols-[1.4fr_auto_auto_auto_auto_auto_auto] gap-4 px-6 py-3 border-b border-line text-faint text-[11px] font-mono uppercase tracking-widest">
+          <span>Cliente</span><span>Conta</span><span>Vence</span><span>Mensalidade</span><span>Base</span><span>Starlink</span><span className="justify-self-end">Ações</span>
         </div>
         {loading ? (
           <p className="text-muted text-sm px-6 py-12 text-center">A carregar…</p>
@@ -195,7 +212,7 @@ export default function Vencimentos() {
             {lista.map((l) => {
               const p = pill(l);
               return (
-                <div key={l.conta} className="grid md:grid-cols-[1.4fr_auto_auto_auto_auto_auto] gap-2 md:gap-4 px-6 py-4 md:items-center hover:bg-card/40 transition-colors">
+                <div key={l.conta} className="grid md:grid-cols-[1.4fr_auto_auto_auto_auto_auto_auto] gap-2 md:gap-4 px-6 py-4 md:items-center hover:bg-card/40 transition-colors">
                   <button onClick={() => abrirFicha(l)} className="flex items-center gap-3 min-w-0 text-left">
                     <div className="w-9 h-9 grid place-items-center border border-line text-accent shrink-0"><User size={15} /></div>
                     <div className="min-w-0">
@@ -207,6 +224,20 @@ export default function Vencimentos() {
                   <div className="text-sm text-muted self-center">{l.vence ? fmtD(l.vence) : "—"}</div>
                   <div className="text-sm text-fg self-center">{l.mensalidade > 0 ? `${fmtMoney(l.mensalidade)}${l.corrigida ? " *" : ""}` : "—"}</div>
                   <div className="text-xs text-faint self-center">{l.base || "—"}</div>
+                  <div className="self-center">
+                    {l.starlinkDue ? (
+                      <div className="text-xs text-muted">
+                        {l.starlinkDue.toLocaleDateString("pt-PT", { day: "2-digit", month: "2-digit" })}
+                        {l.gap !== null && l.gap > 0 && (
+                          <span className="ml-1.5 text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 border text-[#ff6b6b] border-[#ff6b6b]/40 bg-[#ff6b6b]/10" title={`O cliente vence ${l.gap} dia(s) DEPOIS de a Starlink cobrar a Intime — és tu a financiar esses dias`}>
+                            ⚠ +{l.gap}d
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-faint">—</span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-1.5 md:justify-self-end self-center">
                     {l.whatsapp && (
                       <a href={waHref(l)} target="_blank" rel="noopener" title="Cobrar por WhatsApp"

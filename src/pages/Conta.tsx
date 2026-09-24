@@ -37,15 +37,22 @@ function estadoOk(e?: string) { const x = (e || "").toLowerCase(); return x.incl
 // Mensalidade a cada 30 dias: a partir do último pagamento aprovado; se ainda
 // não houver, a partir da ativação/criação da conta.
 function proximaData(d: DocumentData, hist: { id: string; d: DocumentData }[]): Date | null {
-  const aprov = (hist || []).find((h) => { const e = String(h.d.estado || "").toLowerCase(); return e.includes("aprov") || e.includes("pago"); });
+  // base = pagamento aprovado com o ciclo mais avançado (cicloInicio||data máximo).
+  // O cicloInicio protege quem paga adiantado; com adiantamentos de vários meses
+  // há vários docs com a mesma data — o máximo apanha o ciclo certo.
   let base: Date | null = null;
-  // pagamento adiantado carimba cicloInicio (= vencimento pago): o ciclo seguinte
-  // conta a partir daí, para o cliente não perder dias por pagar antes.
-  if (aprov && aprov.d.cicloInicio instanceof Timestamp) base = aprov.d.cicloInicio.toDate();
-  else if (aprov && aprov.d.data instanceof Timestamp) base = aprov.d.data.toDate();
-  else if (d.ativadoEm instanceof Timestamp) base = d.ativadoEm.toDate();
-  else if (d.createdAt instanceof Timestamp) base = d.createdAt.toDate();
-  else if (d.dueDate instanceof Timestamp) return d.dueDate.toDate();
+  for (const h of hist || []) {
+    const e = String(h.d.estado || "").toLowerCase();
+    if (!e.includes("aprov") && !e.includes("pago")) continue;
+    const dt = h.d.cicloInicio instanceof Timestamp ? h.d.cicloInicio.toDate()
+      : h.d.data instanceof Timestamp ? h.d.data.toDate() : null;
+    if (dt && (!base || dt > base)) base = dt;
+  }
+  if (!base) {
+    if (d.ativadoEm instanceof Timestamp) base = d.ativadoEm.toDate();
+    else if (d.createdAt instanceof Timestamp) base = d.createdAt.toDate();
+    else if (d.dueDate instanceof Timestamp) return d.dueDate.toDate();
+  }
   if (!base) return null;
   const next = new Date(base);
   next.setDate(next.getDate() + 30);
@@ -721,7 +728,7 @@ function ClientePagamentos({ conta, dados, hist, histLoading, cfg, showToast }: 
         ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} cloudinary={cfg.cloudinary} showToast={showToast} />
         : pagarProxima && prox && valorProx > 0
         ? <PagamentoWizard conta={conta} dados={dados} metodos={metodos} contactos={cfg.contacts} cloudinary={cfg.cloudinary} showToast={showToast}
-            valorOverride={valorProx} mes={mesProx} cicloInicio={prox}
+            valorOverride={valorProx} mes={mesProx} cicloInicio={new Date(Math.max(prox.getTime(), Date.now()))}
             subtitulo={`Próxima fatura · vence ${dataExtenso(prox)}`} onFechar={() => setPagarProxima(false)} />
         : (
           <div className={panelPad + " text-center"}>
@@ -781,8 +788,8 @@ function PagamentoWizard({ conta, dados, metodos, contactos, cloudinary, showToa
   conta: string; dados: DocumentData; metodos: MetodoPag[];
   contactos: { email: string; whatsapp: string; phone: string };
   cloudinary: { cloudName: string; uploadPreset: string }; showToast: (m: string) => void;
-  // pagamento adiantado da próxima fatura: valor/mês próprios + início do ciclo
-  // (para o vencimento seguinte contar a partir do vencimento, não da data do pagamento)
+  // pagamento da próxima fatura: valor/mês próprios + início do ciclo =
+  // max(vencimento, hoje) — adiantado não perde dias; atrasado conta do pagamento
   valorOverride?: number; mes?: string; cicloInicio?: Date; subtitulo?: string; onFechar?: () => void;
 }) {
   const podeFoto = !!(cloudinary?.cloudName && cloudinary?.uploadPreset);

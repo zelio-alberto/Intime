@@ -25,16 +25,22 @@ const pagMs = (p: DocumentData) => (p.data instanceof Timestamp ? p.data.toMilli
 const aprovado = (p: DocumentData) => { const e = String(p.estado || "").toLowerCase(); return e.includes("aprov") || e.includes("pago"); };
 const emAtraso = (e?: string) => { const x = (e || "").toLowerCase(); return x.includes("atraso") || x.includes("suspens") || x.includes("dívida") || x.includes("divida"); };
 
-// Mensalidade a cada 30 dias — mesma regra do portal (Conta.tsx): a partir do
-// último pagamento aprovado (cicloInicio se adiantado), senão da ativação/criação.
+// Mensalidade a cada 30 dias — mesma regra do portal (Conta.tsx): base = pagamento
+// aprovado com o ciclo mais avançado (cicloInicio||data máximo; com adiantamentos
+// de vários meses há docs com a mesma data), senão ativação/criação.
 function proximaData(dados: DocumentData, pags: DocumentData[]): Date | null {
-  const aprov = pags.find(aprovado);
   let base: Date | null = null;
-  if (aprov?.cicloInicio instanceof Timestamp) base = aprov.cicloInicio.toDate();
-  else if (aprov?.data instanceof Timestamp) base = aprov.data.toDate();
-  else if (dados.ativadoEm instanceof Timestamp) base = dados.ativadoEm.toDate();
-  else if (dados.createdAt instanceof Timestamp) base = dados.createdAt.toDate();
-  else if (dados.dueDate instanceof Timestamp) return dados.dueDate.toDate();
+  for (const p of pags) {
+    if (!aprovado(p)) continue;
+    const dt = p.cicloInicio instanceof Timestamp ? p.cicloInicio.toDate()
+      : p.data instanceof Timestamp ? p.data.toDate() : null;
+    if (dt && (!base || dt > base)) base = dt;
+  }
+  if (!base) {
+    if (dados.ativadoEm instanceof Timestamp) base = dados.ativadoEm.toDate();
+    else if (dados.createdAt instanceof Timestamp) base = dados.createdAt.toDate();
+    else if (dados.dueDate instanceof Timestamp) return dados.dueDate.toDate();
+  }
   if (!base) return null;
   const next = new Date(base); next.setDate(next.getDate() + 30);
   return next;
@@ -54,6 +60,7 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
   const [reg, setReg] = useState(false);
   const [mes, setMes] = useState(monthKey());
   const [valor, setValor] = useState("");
+  const [meses, setMeses] = useState(1);
   const [metodo, setMetodo] = useState("M-Pesa");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -125,19 +132,34 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
   const waDigits = String(cli.whatsapp || "").replace(/\D/g, "");
   const waLink = waDigits ? `https://wa.me/${waDigits.startsWith("258") ? waDigits : "258" + waDigits.replace(/^0+/, "")}` : "";
 
-  const abrirReg = () => { setValor(mensal ? String(Math.round(mensal)) : ""); setMes(monthKey()); setMsg(""); setReg(true); };
+  const abrirReg = () => { setValor(mensal ? String(Math.round(mensal)) : ""); setMes(monthKey()); setMeses(1); setMsg(""); setReg(true); };
+  // Início do novo ciclo: max(vencimento atual, hoje) — adiantado não perde dias,
+  // atrasado renova a contar do dia do pagamento. Cada mês adiantado gera o seu
+  // próprio doc (cicloInicio +30d encadeado) para a contabilidade mensal bater certo.
+  const inicioCiclo = () => new Date(Math.max(vence?.getTime() ?? Date.now(), Date.now()));
   const registar = async () => {
     if (parseMoney(valor) <= 0) { setMsg("Indique o valor."); return; }
     setSaving(true); setMsg("");
     try {
-      await addDoc(collection(db, "pagamentos"), {
-        kitId: kit?.id || "", clienteId: cli.id, clienteNome: cli.nome || "", numeroConta: conta,
-        mes, valor: parseMoney(valor), metodo, estado: "Aprovado", tipo: "Mensalidade",
-        ...(cli.promotor || kit?.promotor ? { promotor: cli.promotor || kit?.promotor } : {}),
-        data: serverTimestamp(),
-      });
-      await logMov("pagamento", `Pagamento ${monthLabel(mes)} · ${fmtMoney(parseMoney(valor))} (${metodo}) · ${cli.nome || ""}`, { kitId: kit?.id, clienteId: cli.id, valor: parseMoney(valor) });
-      setReg(false); setMsg("Pagamento registado ✓"); await carregarPags();
+      const inicio = inicioCiclo();
+      for (let k = 0; k < meses; k++) {
+        const ciclo = new Date(inicio.getTime() + k * 30 * DAY);
+        await addDoc(collection(db, "pagamentos"), {
+          kitId: kit?.id || "", clienteId: cli.id, clienteNome: cli.nome || "", numeroConta: conta,
+          mes: k === 0 ? mes : monthKey(ciclo), valor: parseMoney(valor), metodo, estado: "Aprovado", tipo: "Mensalidade",
+          cicloInicio: Timestamp.fromDate(ciclo),
+          ...(cli.promotor || kit?.promotor ? { promotor: cli.promotor || kit?.promotor } : {}),
+          data: serverTimestamp(),
+        });
+      }
+      const total = parseMoney(valor) * meses;
+      const ate = new Date(inicio.getTime() + meses * 30 * DAY);
+      await logMov("pagamento",
+        meses > 1
+          ? `Pagamento adiantado de ${meses} meses · ${fmtMoney(total)} (${metodo}) · renova ${fmtDia(ate)} · ${cli.nome || ""}`
+          : `Pagamento ${monthLabel(mes)} · ${fmtMoney(total)} (${metodo}) · ${cli.nome || ""}`,
+        { kitId: kit?.id, clienteId: cli.id, valor: total });
+      setReg(false); setMsg(meses > 1 ? `${meses} meses registados ✓ (renova ${fmtDia(ate)})` : "Pagamento registado ✓"); await carregarPags();
     } catch { setMsg("Erro ao registar. Tente de novo."); }
     finally { setSaving(false); }
   };
@@ -293,17 +315,27 @@ export default function FichaCliente({ cli, onClose, onPrev, onNext, pos }: {
               {msg && <div className="text-sm text-accent mb-3">{msg}</div>}
               {reg && (
                 <div className="border border-line bg-bg p-4 mb-4 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div><label className={label}>Mês (YYYY-MM)</label><input className={input} value={mes} onChange={(e) => setMes(e.target.value)} placeholder="2026-07" /></div>
-                    <div><label className={label}>Valor (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
+                    <div><label className={label}>Valor / mês (MT)</label><input className={input} value={valor} onChange={(e) => setValor(e.target.value)} inputMode="numeric" /></div>
+                    <div><label className={label}>Meses (adiantamento)</label>
+                      <select className={input} value={meses} onChange={(e) => setMeses(parseInt(e.target.value, 10) || 1)}>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n === 1 ? "1 mês" : `${n} meses`}</option>)}
+                      </select>
+                    </div>
                   </div>
                   <div><label className={label}>Método</label>
                     <select className={input} value={metodo} onChange={(e) => setMetodo(e.target.value)}>
                       {["M-Pesa", "e-Mola", "Numerário", "Banco", "Outro"].map((m) => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </div>
+                  {parseMoney(valor) > 0 && (
+                    <div className="text-xs text-muted">
+                      Total: <b className="text-fg">{fmtMoney(parseMoney(valor) * meses)}</b> · ciclo conta de <b className="text-fg">{fmtDia(inicioCiclo())}</b> · próxima renovação <b className="text-accent">{fmtDia(new Date(inicioCiclo().getTime() + meses * 30 * DAY))}</b>
+                    </div>
+                  )}
                   <button onClick={registar} disabled={saving} className="w-full bg-fg text-bg py-2.5 font-mono text-[11px] uppercase tracking-[0.15em] font-bold hover:bg-accent transition-colors disabled:opacity-50">
-                    {saving ? "A guardar…" : "Guardar pagamento"}
+                    {saving ? "A guardar…" : meses > 1 ? `Guardar ${meses} meses` : "Guardar pagamento"}
                   </button>
                 </div>
               )}
