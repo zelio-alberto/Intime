@@ -265,10 +265,13 @@ export default function Masterfile() {
   };
 
   const cards = [
-    { label: "Entradas (clientes + avulsas)", value: fmtMoney(tot.entradas), cls: "text-accent" },
-    { label: "Pago à Starlink", value: fmtMoney(tot.starlink), cls: "text-[#7ab8ff]" },
-    { label: "Investido em kits", value: fmtMoney(tot.investimento), cls: "text-[#e6b45a]" },
-    { label: "Outras despesas", value: fmtMoney(tot.outras), cls: "text-muted" },
+    { label: "Entradas (clientes + avulsas)", value: fmtMoney(tot.entradas), cls: "text-accent", destaque: false },
+    { label: "Pago à Starlink", value: fmtMoney(tot.starlink), cls: "text-[#7ab8ff]", destaque: false },
+    { label: "Investido em kits", value: fmtMoney(tot.investimento), cls: "text-[#e6b45a]", destaque: false },
+    { label: "Outras despesas", value: fmtMoney(tot.outras), cls: "text-muted", destaque: false },
+    // o que sobrou das entradas depois da Starlink e das despesas — é o que
+    // deve existir na conta da Intime (os kits são investimento, não operação)
+    { label: "Ficou para a Intime", value: fmtMoney(operacional), cls: operacional >= 0 ? "text-accent" : "text-[#ff6b6b]", destaque: true },
   ];
 
   return (
@@ -311,9 +314,9 @@ export default function Masterfile() {
         )}
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {cards.map((s) => (
-          <div key={s.label} className="border border-line bg-card p-6">
+          <div key={s.label} className={`border p-6 ${s.destaque ? "border-accent/40 bg-accent/5" : "border-line bg-card"}`}>
             <div className={`font-display text-2xl leading-none mb-1 ${s.cls}`}>{s.value}</div>
             <div className="text-[12.5px] text-muted">{s.label}</div>
           </div>
