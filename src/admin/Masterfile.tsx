@@ -106,11 +106,15 @@ export default function Masterfile() {
   const resumo = useMemo<MesResumo[]>(() => {
     const porMes: Record<string, MesResumo> = {};
     const get = (mes: string) => (porMes[mes] ||= { mes, entradas: 0, starlink: 0, investimento: 0, outras: 0, resultado: 0, acumulado: 0 });
+    const custoSlDoKit = new Map(kitInfo.map((ki) => [String(ki.kit.id), ki.custoSlMes]));
     for (const p of aprovados) if (p.mes) get(String(p.mes)).entradas += parseMoney(p.valor);
     for (const e of entrManuais) if (e.mes) get(String(e.mes)).entradas += parseMoney(e.valor);
+    // Cada pagamento aprovado = um ciclo pago = um plano Starlink pago nesse
+    // mês (regra do boss): o custo acompanha os ciclos, não o calendário —
+    // nunca cobra meses sem receita nem o mês corrente adiantado.
+    for (const p of aprovados) if (p.mes && p.kitId) get(String(p.mes)).starlink += custoSlDoKit.get(String(p.kitId)) || 0;
     for (const ki of kitInfo) {
       if (ki.custoKit) get(ki.inicio).investimento += ki.custoKit;
-      for (const m of ki.meses) if (ki.custoSlMes) get(m).starlink += ki.custoSlMes;
     }
     for (const d of despManuais) if (d.mes) get(String(d.mes)).outras += parseMoney(d.valor);
     const lista = Object.values(porMes).sort((a, b) => a.mes.localeCompare(b.mes));
@@ -149,15 +153,17 @@ export default function Masterfile() {
           entrada: 0, saida: ki.custoKit,
         });
       }
-      for (const m of ki.meses) {
-        if (!ki.custoSlMes) continue;
-        linhas.push({
-          id: `sl_${ki.kit.id}_${m}`, ts: tsDoMes(m), data: null,
-          mes: m, categoria: "starlink",
-          descricao: `Plano Starlink ${monthLabel(m)} — ${ki.nome}`, detalhe: starlinkOf(ki.kit)?.product || "Starlink",
-          entrada: 0, saida: ki.custoSlMes,
-        });
-      }
+    }
+    // linhas Starlink sintéticas: uma por ciclo pago (espelha o resumo)
+    for (const p of aprovados) {
+      const ki = kitInfo.find((x) => String(x.kit.id) === String(p.kitId));
+      if (!ki || !ki.custoSlMes || !p.mes) continue;
+      linhas.push({
+        id: `sl_${p.id}`, ts: ms(p.data) || ms(p.createdAt), data: p.data instanceof Timestamp ? p.data : null,
+        mes: String(p.mes), categoria: "starlink",
+        descricao: `Plano Starlink do ciclo — ${ki.nome}`, detalhe: starlinkOf(ki.kit)?.product || "Starlink",
+        entrada: 0, saida: ki.custoSlMes,
+      });
     }
     for (const d of despManuais) {
       linhas.push({
