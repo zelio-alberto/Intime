@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, type DocumentData } from "firebase/firestore";
 import { db } from "../firebase";
 import { pageTitle } from "./ui";
-import { parseMoney, fmtMoney, kitAlocado, starlinkOf } from "./gestaoUtils";
+import { parseMoney, fmtMoney, kitAlocado, custoSlMensal } from "./gestaoUtils";
 import { TrendingUp, Banknote, PackageMinus, ShieldCheck, Rocket, Lightbulb } from "lucide-react";
 
 // Estratégias para acelerar a recuperação do investimento nos kits.
@@ -25,7 +25,7 @@ export default function Estrategias() {
     const aloc = kits.filter(kitAlocado);
     const media = (vals: number[]) => (vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0);
     const custoKit = media(aloc.map((k) => parseMoney(k.custoAquisicao)).filter((v) => v > 0)) || 14290;
-    const custoSl = media(aloc.map((k) => parseMoney(starlinkOf(k)?.amount)).filter((v) => v > 0)) || 1900;
+    const custoSl = media(aloc.map((k) => custoSlMensal(k)).filter((v) => v > 0)) || 1900;
     const mensal = media(aloc.map((k) => parseMoney(k.mensalidade)).filter((v) => v > 0)) || 3000;
     const recebidoTotal = pags.filter((p) => String(p.estado ?? "Aprovado") === "Aprovado").reduce((s, p) => s + parseMoney(p.valor), 0);
     const margemAtual = mensal - custoSl;

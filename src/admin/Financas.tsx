@@ -3,7 +3,7 @@ import { collection, onSnapshot, doc, updateDoc, type DocumentData } from "fireb
 import { db } from "../firebase";
 import { useSiteConfig } from "../useSiteConfig";
 import { pageTitle } from "./ui";
-import { parseMoney, fmtMoney, monthKey, monthLabel, daysUntil, kitAlocado, starlinkOf, logMov, estadoPillCls } from "./gestaoUtils";
+import { parseMoney, fmtMoney, monthKey, monthLabel, daysUntil, kitAlocado, starlinkOf, custoSlMensal, logMov, estadoPillCls } from "./gestaoUtils";
 import { MessageCircle, Check, CheckCircle2 } from "lucide-react";
 
 type Kit = { id: string } & DocumentData;
@@ -61,7 +61,7 @@ export default function Financas() {
     const alocadas = kits.filter((k) => kitAlocado(k));
     const prevista = alocadas.reduce((s, k) => s + parseMoney(k.mensalidade), 0);
     // Custo recorrente: o que a Intime paga à Starlink por mês (kits alocados).
-    const custoStarlinkMes = alocadas.reduce((s, k) => s + parseMoney(starlinkOf(k)?.amount), 0);
+    const custoStarlinkMes = alocadas.reduce((s, k) => s + custoSlMensal(k), 0);
     const emAtraso = alocadas.filter((k) => atrasoDe(k.id) >= 1).sort((a, b) => atrasoDe(b.id) - atrasoDe(a.id));
     let divida = 0, b30 = 0, b60 = 0, b90 = 0;
     for (const k of emAtraso) {
@@ -203,7 +203,7 @@ export default function Financas() {
               {calc.porReceita.map((k) => {
                 const ger = calc.lifetime[k.id] || 0; const cnt = calc.count[k.id] || 0;
                 const custoKit = parseMoney(k.custoAquisicao);
-                const slMes = parseMoney(starlinkOf(k)?.amount);
+                const slMes = custoSlMensal(k);
                 const custoSl = slMes * cnt; // Starlink × meses pagos
                 const margemMes = parseMoney(k.mensalidade) - slMes;
                 const payback = margemMes > 0 && custoKit > 0 ? Math.ceil(custoKit / margemMes) : null;

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, addDoc, serverTimestamp, Timestamp, type DocumentData } from "firebase/firestore";
 import { db, auth } from "../firebase";
 import { pageTitle, input, label } from "./ui";
-import { parseMoney, fmtMoney, monthKey, monthLabel, fmtDateTime, kitAlocado, starlinkOf, logMov } from "./gestaoUtils";
+import { parseMoney, fmtMoney, monthKey, monthLabel, fmtDateTime, kitAlocado, starlinkOf, custoSlMensal, logMov } from "./gestaoUtils";
 import { ArrowDownLeft, Download, Plus, Search, X, Satellite, Package, Wallet, TrendingUp, TrendingDown } from "lucide-react";
 
 // Masterfile: demonstração de RESULTADOS do negócio, derivada automaticamente:
@@ -97,7 +97,7 @@ export default function Masterfile() {
       kit: k, inicio,
       nome: String(k.cliente || k.conta || "kit"),
       custoKit: parseMoney(k.custoAquisicao),
-      custoSlMes: parseMoney(starlinkOf(k)?.amount),
+      custoSlMes: custoSlMensal(k),
       meses: mesesDesde(inicio),
     };
   }), [kits, aprovados]);

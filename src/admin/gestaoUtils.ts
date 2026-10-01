@@ -63,8 +63,16 @@ export function starlinkOf(kit: DocumentData): DocumentData | null {
   return kit.starlink && typeof kit.starlink === "object" ? (kit.starlink as DocumentData) : null;
 }
 
+// Custo mensal do plano Starlink do kit: a fatura captada pelo leitor de
+// emails manda; kit.custoStarlinkMes é o fallback manual (vive FORA do mapa
+// starlink porque o leitor reescreve o mapa inteiro — amount volta a null
+// quando só chegam avisos de suspensão).
+export function custoSlMensal(kit: DocumentData): number {
+  return parseMoney(starlinkOf(kit)?.amount) || parseMoney(kit.custoStarlinkMes);
+}
+
 export function margemMensal(kit: DocumentData): number {
-  return parseMoney(kit.mensalidade) - parseMoney(starlinkOf(kit)?.amount);
+  return parseMoney(kit.mensalidade) - custoSlMensal(kit);
 }
 
 export function fmtDateTime(ts: unknown): string {
