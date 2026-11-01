@@ -34,6 +34,7 @@ import Mapa from './admin/Mapa';
 import NovoCadastro from './admin/NovoCadastro';
 import Financas from './admin/Financas';
 import Vencimentos from './admin/Vencimentos';
+import RegistarPagamento from './admin/RegistarPagamento';
 import Masterfile from './admin/Masterfile';
 import Estrategias from './admin/Estrategias';
 
@@ -64,6 +65,7 @@ export default function App() {
           </Route>
           <Route path="financas" element={<Financas />} />
           <Route path="vencimentos" element={<Vencimentos />} />
+          <Route path="registar-pagamento" element={<RegistarPagamento />} />
           <Route path="masterfile" element={<Masterfile />} />
           <Route path="estrategias" element={<Estrategias />} />
           <Route path="novo" element={<NovoCadastro />} />
