@@ -62,6 +62,7 @@ export default function Masterfile() {
   const [despesas, setDespesas] = useState<DocumentData[]>([]);
   const [kits, setKits] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [erroCarregar, setErroCarregar] = useState("");
   const [filtro, setFiltro] = useState<"todos" | "entradas" | "equipamento" | "starlink" | "outras">("todos");
   const [mesFiltro, setMesFiltro] = useState("");
   const [busca, setBusca] = useState("");
@@ -72,13 +73,27 @@ export default function Masterfile() {
   const [form, setForm] = useState({ data: hojeIso(), valor: "", descricao: "", fornecedor: "", kitId: "" });
 
   useEffect(() => {
+    // Se a leitura falhar (ex.: quota diária do Firestore esgotada, ou sem
+    // ligação), NÃO mostrar 0 — isso parece perda de dados. Marca-se o erro e a
+    // UI avisa a sério. Os dados continuam no Firestore; só não foram lidos.
+    const onErr = (e: any) => {
+      setLoading(false);
+      const code = String(e?.code || "");
+      setErroCarregar(
+        code === "resource-exhausted"
+          ? "Limite diário de leituras do Firestore atingido. Os dados ESTÃO guardados — só não puderam ser lidos agora. Tenta mais tarde (reinicia de madrugada) ou ativa o plano Blaze para acabar com o limite."
+          : code === "permission-denied"
+            ? "Sem permissão para ler (sessão/login). Sai e entra de novo."
+            : "Não foi possível carregar os dados agora (quota ou ligação). Os teus dados estão guardados — tenta de novo daqui a pouco.",
+      );
+    };
     const u1 = onSnapshot(collection(db, "pagamentos"),
-      (s) => { setPags(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))); setLoading(false); },
-      () => setLoading(false));
+      (s) => { setPags(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))); setLoading(false); setErroCarregar(""); },
+      onErr);
     const u2 = onSnapshot(collection(db, "despesas"),
-      (s) => setDespesas(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
+      (s) => setDespesas(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), onErr);
     const u3 = onSnapshot(collection(db, "kits"),
-      (s) => setKits(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), () => {});
+      (s) => setKits(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), onErr);
     return () => { u1(); u2(); u3(); };
   }, []);
 
@@ -106,7 +121,7 @@ export default function Masterfile() {
   const resumo = useMemo<MesResumo[]>(() => {
     const porMes: Record<string, MesResumo> = {};
     const get = (mes: string) => (porMes[mes] ||= { mes, entradas: 0, starlink: 0, investimento: 0, outras: 0, resultado: 0, acumulado: 0 });
-    const custoSlDoKit = new Map(kitInfo.map((ki) => [String(ki.kit.id), ki.custoSlMes]));
+    const custoSlDoKit = new Map<string, number>(kitInfo.map((ki) => [String(ki.kit.id), ki.custoSlMes]));
     for (const p of aprovados) if (p.mes) get(String(p.mes)).entradas += parseMoney(p.valor);
     for (const e of entrManuais) if (e.mes) get(String(e.mes)).entradas += parseMoney(e.valor);
     // Cada pagamento aprovado = um ciclo pago = um plano Starlink pago nesse
@@ -293,6 +308,16 @@ export default function Masterfile() {
           </button>
         </div>
       </div>
+
+      {erroCarregar && (
+        <div className="border border-[#ff6b6b]/50 bg-[#ff6b6b]/[0.08] px-5 py-4 mb-4 flex items-start gap-3">
+          <TrendingDown size={18} className="text-[#ff6b6b] shrink-0 mt-0.5" />
+          <div>
+            <div className="text-[#ff6b6b] font-medium text-sm mb-0.5">Dados não carregados</div>
+            <div className="text-muted text-sm">{erroCarregar}</div>
+          </div>
+        </div>
+      )}
 
       {/* Resultado global */}
       <div className={`border p-6 md:p-8 mb-4 ${tot.resultado >= 0 ? "border-accent bg-accent/[0.05]" : "border-[#e6b45a]/60 bg-[#e6b45a]/[0.05]"}`}>
