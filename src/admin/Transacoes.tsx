@@ -65,11 +65,7 @@ export default function Transacoes() {
   };
 
   useEffect(() => {
-    // Só as transações RECENTES ao vivo. A coleção do gateway cresce sem fim
-    // (cada SMS = 1 doc); ler 300 de cada vez esgotava a quota grátis de
-    // leituras do Firestore. 80 chega de sobra para associar o que vai entrando
-    // — o resto (histórico) fica no filtro "Associadas" e na procura.
-    const u1 = onSnapshot(query(collection(db, "transacoesMpesa"), orderBy("createdAt", "desc"), limit(80)),
+    const u1 = onSnapshot(query(collection(db, "transacoesMpesa"), orderBy("createdAt", "desc"), limit(300)),
       (s) => { setTxs(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))); setLoading(false); },
       () => setLoading(false));
     // As associadas carregam-se todas (sem limite) — as antigas caem fora das 300 recentes mas têm de aparecer na lista.
