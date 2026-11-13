@@ -62,7 +62,6 @@ export default function Header() {
           <nav className="hidden lg:flex items-center gap-10">
             <Link to="/" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/" ? "text-accent" : "text-muted hover:text-fg")}>Início</Link>
             <Link to="/como-funciona" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/como-funciona" ? "text-accent" : "text-muted hover:text-fg")}>Como funciona</Link>
-            <Link to="/equipamentos" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/equipamentos" ? "text-accent" : "text-muted hover:text-fg")}>Equipamentos</Link>
             <Link to="/sobre" className={clsx("text-[11px] font-mono tracking-[0.2em] uppercase transition-colors", location.pathname === "/sobre" ? "text-accent" : "text-muted hover:text-fg")}>Sobre</Link>
             <a href="/#planos" className="text-[11px] font-mono tracking-[0.2em] uppercase text-muted hover:text-fg transition-colors">Planos</a>
             <a href="/#promotores" className="text-[11px] font-mono tracking-[0.2em] uppercase text-muted hover:text-fg transition-colors">Promotores</a>
@@ -95,7 +94,6 @@ export default function Header() {
         <div className="fixed inset-0 z-[199] bg-bg pt-28 px-6 pb-10 flex flex-col gap-4 overflow-y-auto lg:hidden">
           <Link to="/" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Início</Link>
           <Link to="/como-funciona" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Como funciona</Link>
-          <Link to="/equipamentos" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Equipamentos</Link>
           <Link to="/sobre" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Sobre</Link>
           <a href="/#planos" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Planos</a>
           <a href="/#promotores" onClick={closeMenu} className="py-4 text-xl font-display uppercase tracking-widest border-b border-line text-fg">Promotores</a>
